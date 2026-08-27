@@ -1,0 +1,134 @@
+// Raimak LMS - App Configuration v3.0
+
+const Config = {
+  azure: {
+    clientId: "e4117d54-a18b-4d17-9012-3bd1c96fd35e",
+    tenantId: "39e14190-0b23-4ecd-99f9-606ad1215881",
+    redirectUri: window.location.origin + window.location.pathname,
+  },
+
+  sharePoint: {
+    hostname: "raimak.sharepoint.com",
+    sites: {
+      leadship: "sites/RaimakLeadship",
+      team: "TeamSite",
+    },
+    lists: {
+      activityLog: "032f2d9f-2528-47a5-9e9e-fbfce00683aa",
+      contractorList: "bd5df38a-9cb6-411d-87e8-3e79934213d3",
+      leadsList: "33198b95-bdfe-499d-b867-3f00b096a9a7",
+      ordersAndInstalls: "9d5c9b0b-10d1-4b15-988c-051ef8117d40",
+      productPerformance: "870acf73-e3fd-44b4-98cd-a49e9497fff1",
+      agentPerformance: "93b94795-ae98-4134-9cbc-c92618856012",
+      statePerformance: "9c202207-343c-41af-ae36-bd3797c3f372",
+      operationsHealth: "534d595e-521a-4f02-af02-23e5ee427a74",
+      agentScores: "242d56aa-dfcd-4399-919b-0ce608ec932c",
+      agentScoresLedger: "7c6f1604-bd68-4ceb-9f0c-9271faf5e0b8",
+      suspensionsList: "d30048fb-8f64-4ed9-9719-6fec2aaca9a9",
+      rewardOrdersList: "06A1DC4C-F120-4BF6-9E53-F5ECE25A58BD",
+    },
+    graphBase: "https://graph.microsoft.com/v1.0",
+  },
+
+  rules: {
+    coolOffDays: 2,
+    maxLeadsPerAgent: 9999,
+    maxContactsPerDay: 9999,
+    recycleAfterDays: 30,
+    appVersion: "3.0",
+  },
+
+  // Pipeline statuses
+  leadStatuses: [
+    "New",
+    "1st Contact",
+    "2nd Contact",
+    "3rd Contact",
+    "Do Not Call",
+    "Sold",
+    "Pending Order",
+    "FNQ",
+    "Already has Fiber",
+  ],
+
+  // Terminal statuses — removed from agent queue, admin only
+  terminalStatuses: ["Do Not Call", "Sold", "FNQ", "Already has Fiber", "TDM"],
+
+  // TDM is kicked back to admin (D2D only)
+  adminOnlyStatuses: ["TDM"],
+
+  soldStatus: "Sold",
+
+  // Lead types
+  leadTypes: ["OFS", "MLR"],
+
+  // Current products options — alphabetical
+  currentProducts: [
+    "Internet",
+    "Internet + VAS",
+    "Home Phone",
+    "Home Phone + VAS",
+  ],
+
+  leadSources: [
+    "Web Form",
+    "Referral",
+    "Cold Call",
+    "Email Campaign",
+    "Social Media",
+    "Trade Show",
+    "Other",
+  ],
+
+  roles: {
+    admins: [
+      "B.Hinesley@raimak.com",
+      "S.Balleste@raimak.com",
+      "N.Caldwell@raimak.com",
+      "C.Scarrett@raimak.com",
+      "m.mcalpine@raimak.com",
+      "J.Scroggins@raimak.com",
+      "antoinette.bickel@raimak.com",
+      "m.garcia@raimak.com",
+      "j.smith@raimak.com",
+      "c.milland@raimak.com",
+      "c.foor@raimak.com",
+    ],
+  },
+
+  // In config.js -> Config object:
+  salesCenterAgents: [
+    "m.mcalpine@raimak.com",
+    "j.torres@raimak.com",
+    "n.caldwell@raimak.com",
+    "k.leroux@raimak.com",
+    "c.scarrett@raimak.com",
+    "jennifer.smith@raimak.com",
+    "a.cooper@raimak.com",
+    "t.mathis@raimak.com",
+    "t.henry@raimak.com",
+    "S.balleste@raimak.com",
+    "N.Jones@raimak.com",
+    "m.stevens@raimak.com",
+    "k.rountree@raimak.com",
+    "j.scroggins@raimak.com",
+    "h.gatlin@raimak.com",
+    "c.vandeboe@raimak.com",
+    "h.norris@raimak.com",
+    "a.owens@raimak.com",
+    "a.lewis@raimak.com",
+    "k.moats@raimak.com",
+    "m.windle@raimak.com",
+  ],
+
+  universalAgents: [
+    "j.redix@raimak.com",
+    "a.gonzalez@raimak.com",
+    "i.turrubiartez@raimak.com",
+    "t.hughes@raimak.com",
+  ],
+
+  scopes: ["Sites.ReadWrite.All", "User.Read"],
+
+  salesFeedInterval: 45000,
+};
