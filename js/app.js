@@ -988,9 +988,9 @@ function startSalesFeedPolling() {
     try {
       // 🚀 THE IPHONE 7 FIX: The RAM "Amnesia" Backup
       // If Safari rejects the physical storage save, we hold the sync date in memory.
-      const leadsSyncDate =
-        State.memoryLeadsSyncDate ||
-        localStorage.getItem("RaimakKineticLeadsLastSyncDate");
+      const leadsSyncDate = localStorage.getItem(
+        "RaimakKineticLeadsLastSyncDate",
+      );
       const userEmail = State.currentUser ? State.currentUser.email : null;
 
       const [updatedLeads, logData, suspensionExpiration] = await Promise.all([
@@ -1031,9 +1031,6 @@ function startSalesFeedPolling() {
       State.leads = updatedLeads;
       State.activityLog = logData.updatedLogs;
       State.lastSyncDate = logData.newSyncDate;
-
-      // 🚀 Lock in the RAM fallback for the next poll
-      State.memoryLeadsSyncDate = new Date().toISOString();
 
       const newSales = Graph.getTodaySales(State.activityLog);
       State.todaySales = newSales;
@@ -2091,8 +2088,9 @@ function stageStatus(leadId, newStatus) {
 
 async function agentSaveAll(leadId) {
   const user = State.currentUser;
-  window._sessionWorkedLeads = window._sessionWorkedLeads || new Map();
-  window._sessionWorkedLeads.set(leadId, Date.now());
+
+  // (Removed _sessionWorkedLeads assignment from here - moved to try block)
+
   const lead = State.leads.find((l) => l.id === leadId);
   if (!lead) return;
 
@@ -2112,7 +2110,7 @@ async function agentSaveAll(leadId) {
   const newNote = (document.getElementById("feed-notes") || {}).value || "";
   const cbr = (document.getElementById("feed-cbr") || {}).value || "";
   const btn = (document.getElementById("feed-btn") || {}).value || "";
-  const gac = (document.getElementById("feed-gac") || {}).value || ""; // 🚀 Added GAC
+  const gac = (document.getElementById("feed-gac") || {}).value || "";
   const soldByEl = document.getElementById("feed-sold-by");
   const soldByName = soldByEl ? soldByEl.value : "";
   let rawCallbackDate =
@@ -2182,7 +2180,11 @@ async function agentSaveAll(leadId) {
     newStatus === Config.soldStatus ? soldByEmail : (user && user.email) || "";
 
   // 2. Setup Payload for SharePoint
-  const todayDate = new Date().toISOString().split("T")[0];
+
+  // 🐛 FIX 2: The Rapid-Aging Timezone Bug
+  // Removed .split("T")[0] to ensure the exact ISO timestamp is saved to the database.
+  const todayDate = new Date().toISOString();
+
   const saveFields = {
     Status: newStatus,
     LastTouchedOn: todayDate,
@@ -2193,7 +2195,7 @@ async function agentSaveAll(leadId) {
   if (products) saveFields["CurrentProducts"] = products;
   if (cbr) saveFields["CBR"] = cbr;
   if (btn) saveFields["BTN"] = btn;
-  if (gac) saveFields["GAC"] = gac; // 🚀 Mapped GAC for upload
+  if (gac) saveFields["GAC"] = gac;
 
   saveFields["CallbackDateTime"] = rawCallbackDate
     ? new Date(rawCallbackDate).toISOString()
@@ -2204,6 +2206,7 @@ async function agentSaveAll(leadId) {
   if (newStatus === "TDM") {
     saveFields["Agent_x0020_Assigned"] = null;
   }
+
   setLoading(true);
   try {
     const logEntry = {
@@ -2219,8 +2222,13 @@ async function agentSaveAll(leadId) {
     };
 
     // 🚀 THE RACE CONDITION FIX: Sequential Awaits!
-    // The Lead MUST update successfully in SharePoint before the Activity Log is written!
     await Graph.updateLead(leadId, saveFields);
+
+    // 🐛 FIX 1: The Premature Timeout Bug
+    // Moved here so the lead is only placed in the timeout block if SharePoint actually accepts the save.
+    window._sessionWorkedLeads = window._sessionWorkedLeads || new Map();
+    window._sessionWorkedLeads.set(leadId, Date.now());
+
     await Graph.logActivity(logEntry);
 
     // LOCAL STATE: Fixed leadName mapping
@@ -2242,8 +2250,12 @@ async function agentSaveAll(leadId) {
     if (products) lead.currentProducts = products;
     if (cbr) lead.cbr = cbr;
     if (btn) lead.btn = btn;
-    if (gac) lead.gac = gac; // 🚀 Updated GAC in RAM
+    if (gac) lead.gac = gac;
     lead.callbackAt = rawCallbackDate || null;
+
+    // 🐛 FIX 3: The Zombie Queue Bug
+    // Added this directly below callbackAt to ensure the local RAM clock perfectly matches the database timestamp.
+    lead.lastContacted = todayDate;
 
     Points.awardPoints(newStatus, leadId);
 
