@@ -625,6 +625,9 @@ function navigate(view) {
     case "myleads":
       renderMyLeads();
       break;
+    case "scrubhub":
+      renderScrubHub();
+      break;
     case "callbacks":
       renderCallBacks();
       break;
@@ -1748,21 +1751,28 @@ function renderLeadFeedCard(myLeads) {
     }
   }
 
-  // 🚀 KINETIC META ROW: Strips email/phone and injects split GAC/BTN/CBR
+  // 🚀 KINETIC META ROW: Only Address badge!
   let metaHtml = "";
-  if (lead.btn)
-    metaHtml += `<span class="feed-meta">📱 BTN: ${escHtml(lead.btn)}</span>`;
-  if (lead.cbr)
-    metaHtml += `<span class="feed-meta">📞 CBR: ${escHtml(lead.cbr)}</span>`;
-  if (lead.gac)
-    metaHtml += `<span class="feed-meta">🔢 GAC: ${escHtml(lead.gac)}</span>`;
-  if (lead.address)
+  if (lead.address) {
     metaHtml += `<span class="feed-meta">📍 ${escHtml(lead.address)}${lead.city ? ", " + escHtml(lead.city) : ""}${lead.state ? " " + escHtml(lead.state) : ""}${lead.zip ? " " + escHtml(lead.zip) : ""}</span>`;
+  }
   clone.getElementById("feed-meta-container").innerHTML = metaHtml;
 
-  clone.getElementById("feed-btn").value = lead.btn || "";
-  clone.getElementById("feed-mrc").value = lead.currentMRC || "";
-  clone.getElementById("feed-cbr").value = lead.cbr || "";
+  // 🚀 POPULATE INPUT BOXES
+  const btnEl = clone.getElementById("feed-btn");
+  if (btnEl) btnEl.value = lead.btn || "";
+
+  const mrcEl = clone.getElementById("feed-mrc");
+  if (mrcEl) mrcEl.value = lead.currentMRC || "";
+
+  const cbrEl = clone.getElementById("feed-cbr");
+  if (cbrEl) cbrEl.value = lead.cbr || "";
+
+  const gacEl = clone.getElementById("feed-gac");
+  if (gacEl) gacEl.value = lead.gac || "";
+
+  const emailEl = clone.getElementById("feed-email");
+  if (emailEl) emailEl.value = lead.email || "";
 
   const callbackInput = clone.getElementById("f-callback-date");
   const callbackWrap = clone.getElementById("callback-wrapper");
@@ -1923,11 +1933,13 @@ function renderLeadFeedCard(myLeads) {
 
   clone.getElementById("feed-save-btn").onclick = () => agentSaveAll(lead.id);
 
-  // 🚀 KINETIC DRAFTS: Phone is removed
+  // 🚀 KINETIC DRAFTS: Added Email and GAC
   const inputsToDraft = [
     { id: "feed-btn", key: "btn" },
     { id: "feed-mrc", key: "mrc" },
     { id: "feed-cbr", key: "cbr" },
+    { id: "feed-gac", key: "gac" },
+    { id: "feed-email", key: "email" },
     { id: "feed-notes", key: "notes" },
     { id: "feed-products", key: "products" },
     { id: "feed-sold-by", key: "soldBy" },
@@ -2111,6 +2123,7 @@ async function agentSaveAll(leadId) {
   const cbr = (document.getElementById("feed-cbr") || {}).value || "";
   const btn = (document.getElementById("feed-btn") || {}).value || "";
   const gac = (document.getElementById("feed-gac") || {}).value || "";
+  const email = (document.getElementById("feed-email") || {}).value || ""; // 🚀 Grab Email
   const soldByEl = document.getElementById("feed-sold-by");
   const soldByName = soldByEl ? soldByEl.value : "";
   let rawCallbackDate =
@@ -2182,7 +2195,6 @@ async function agentSaveAll(leadId) {
   // 2. Setup Payload for SharePoint
 
   // 🐛 FIX 2: The Rapid-Aging Timezone Bug
-  // Removed .split("T")[0] to ensure the exact ISO timestamp is saved to the database.
   const todayDate = new Date().toISOString();
 
   const saveFields = {
@@ -2196,6 +2208,7 @@ async function agentSaveAll(leadId) {
   if (cbr) saveFields["CBR"] = cbr;
   if (btn) saveFields["BTN"] = btn;
   if (gac) saveFields["GAC"] = gac;
+  if (email) saveFields["Email"] = email; // 🚀 Send Email to SharePoint
 
   saveFields["CallbackDateTime"] = rawCallbackDate
     ? new Date(rawCallbackDate).toISOString()
@@ -2225,7 +2238,6 @@ async function agentSaveAll(leadId) {
     await Graph.updateLead(leadId, saveFields);
 
     // 🐛 FIX 1: The Premature Timeout Bug
-    // Moved here so the lead is only placed in the timeout block if SharePoint actually accepts the save.
     window._sessionWorkedLeads = window._sessionWorkedLeads || new Map();
     window._sessionWorkedLeads.set(leadId, Date.now());
 
@@ -2251,10 +2263,10 @@ async function agentSaveAll(leadId) {
     if (cbr) lead.cbr = cbr;
     if (btn) lead.btn = btn;
     if (gac) lead.gac = gac;
+    if (email) lead.email = email; // 🚀 Save Email to local memory
     lead.callbackAt = rawCallbackDate || null;
 
     // 🐛 FIX 3: The Zombie Queue Bug
-    // Added this directly below callbackAt to ensure the local RAM clock perfectly matches the database timestamp.
     lead.lastContacted = todayDate;
 
     Points.awardPoints(newStatus, leadId);
@@ -2272,14 +2284,12 @@ async function agentSaveAll(leadId) {
     // Update Save Button
     const saveBtn = document.getElementById("feed-save-btn");
     if (saveBtn) {
-      // 1. Trigger the Success State
       saveBtn.textContent = "Saved ✓";
       saveBtn.disabled = true;
       saveBtn.style.background = "var(--green, #10b981)";
       saveBtn.style.borderColor = "var(--green, #10b981)";
       saveBtn.style.cursor = "default";
 
-      // 2. The 2-Second Cooldown & Reset
       setTimeout(() => {
         saveBtn.textContent = "Save";
         saveBtn.disabled = false;
@@ -2425,7 +2435,217 @@ function advanceToNextLead() {
   _leadSaved = false;
   renderMyLeads();
 }
+// ============================================================
+//  AGENT — SCRUB HUB
+// ============================================================
+function renderScrubHub() {
+  // ==========================================
+  //  THE STRICT BOUNCER
+  // ==========================================
+  const unscrubbedLeads = State.leads.filter((l) => {
+    // 1. Ignore deleted/terminal leads just in case they ghosted in
+    if (Config.terminalStatuses.includes(l.status)) return false;
 
+    // 2. Only catch leads that are blank or explicitly marked "Unscrubbed"
+    const type = (l.leadType || "").toLowerCase().trim();
+    if (type !== "" && type !== "unscrubbed") return false;
+
+    return true;
+  });
+
+  console.log("--- SCRUB HUB DIAGNOSTIC ---");
+  console.log(
+    `Total unscrubbed Kinetic leads in RAM: ${unscrubbedLeads.length}`,
+  );
+  console.log("----------------------------");
+
+  // ==========================================
+  //  ☕ THE FINISH LINE (Preserving the UI)
+  // ==========================================
+  const mainContent = document.getElementById("main-content");
+  mainContent.innerHTML = "";
+
+  const template = document.getElementById("tmpl-scrub-hub");
+  if (!template) {
+    console.error("Scrub Hub template missing from HTML!");
+    return;
+  }
+  const clone = template.content.cloneNode(true);
+
+  const countEl = clone.getElementById("scrub-hub-count");
+  const queueContainer = clone.getElementById("scrub-queue-container");
+
+  // Update Sidebar Badge & Title Count
+  if (countEl) countEl.textContent = unscrubbedLeads.length;
+  const sidebarBadge = document.getElementById("badge-scrubhub");
+  if (sidebarBadge) {
+    sidebarBadge.textContent = unscrubbedLeads.length;
+    sidebarBadge.style.display =
+      unscrubbedLeads.length > 0 ? "inline-block" : "none";
+  }
+
+  // If the queue is empty, inject the empty state INTO the container (Mirroring My Leads)
+  if (unscrubbedLeads.length === 0) {
+    if (queueContainer) {
+      queueContainer.innerHTML = `
+        <div class="card" style="text-align:center; padding:60px 20px;">
+          <div style="font-size:4rem; margin-bottom:20px;">✨</div>
+          <h2 class="view-title">Queue Empty!</h2>
+          <p style="color:var(--text-3); margin-bottom:24px;">All Kinetic leads have been scrubbed and categorized.</p>
+          
+          <button class="btn-primary" onclick="this.innerHTML='Syncing...'; this.disabled=true; typeof loadAllData === 'function' ? loadAllData() : window.location.reload();">Check for Updates</button>
+        </div>`;
+    }
+
+    // Hide the hardcoded HTML empty state if it still exists in the template
+    const oldEmptyState = clone.getElementById("scrub-empty-state");
+    if (oldEmptyState) oldEmptyState.style.display = "none";
+
+    mainContent.appendChild(clone);
+    return;
+  }
+
+  // ==========================================
+  //  THE RENDER LOGIC (If there are leads)
+  // ==========================================
+  if (queueContainer) {
+    queueContainer.innerHTML = "";
+
+    const oldEmptyState = clone.getElementById("scrub-empty-state");
+    if (oldEmptyState) oldEmptyState.style.display = "none";
+
+    // 🚀 Inject each lead as its own card into the vertical list
+    unscrubbedLeads.forEach((lead) => {
+      queueContainer.appendChild(renderScrubCard(lead));
+    });
+  }
+
+  mainContent.appendChild(clone);
+}
+function renderScrubCard(lead) {
+  const template = document.getElementById("tmpl-scrub-card");
+  const clone = template.content.cloneNode(true);
+
+  // 🚀 ANTI-COLLISION: Suffix IDs with the unique lead ID so they don't overlap in the list
+  const typeSelect = clone.getElementById("sc-type-select");
+  const reasonContainer = clone.getElementById("sc-bad-reason-container");
+  const reasonSelect = clone.getElementById("sc-bad-reason-select");
+  const saveBtn = clone.getElementById("sc-save-btn");
+
+  typeSelect.id = `sc-type-select-${lead.id}`;
+  reasonContainer.id = `sc-bad-reason-container-${lead.id}`;
+  reasonSelect.id = `sc-bad-reason-select-${lead.id}`;
+  saveBtn.id = `sc-save-btn-${lead.id}`;
+
+  // Populate Customer Data
+  clone.getElementById("sc-name").textContent = lead.name || "Unknown Lead";
+
+  const addressEl = clone.getElementById("sc-address");
+  if (lead.address) {
+    addressEl.textContent = `📍 ${lead.address}${lead.city ? ", " + lead.city : ""}${lead.state ? " " + lead.state : ""}${lead.zip ? " " + lead.zip : ""}`;
+  } else {
+    addressEl.style.display = "none";
+  }
+
+  let metaHtml = "";
+  if (lead.btn)
+    metaHtml += `<span class="feed-meta" style="margin-right:12px;">📱 BTN: ${escHtml(lead.btn)}</span>`;
+  if (lead.cbr)
+    metaHtml += `<span class="feed-meta" style="margin-right:12px;">📞 CBR: ${escHtml(lead.cbr)}</span>`;
+  if (lead.gac)
+    metaHtml += `<span class="feed-meta" style="margin-right:12px;">🔢 GAC: ${escHtml(lead.gac)}</span>`;
+  clone.getElementById("sc-meta-container").innerHTML = metaHtml;
+
+  // 🔄 CONDITIONAL UI: Show/Hide the "Bad Reason" box
+  typeSelect.addEventListener("change", (e) => {
+    if (e.target.value === "Bad Lead") {
+      reasonContainer.style.display = "block";
+    } else {
+      reasonContainer.style.display = "none";
+      reasonSelect.value = "";
+    }
+  });
+
+  // 💾 ROBUST SAVE LOGIC (Mirrors agentSaveAll mechanics)
+  saveBtn.addEventListener("click", async () => {
+    const selectedType = typeSelect.value;
+    const selectedReason = reasonSelect.value;
+
+    // Validation
+    if (!selectedType || selectedType === "Unscrubbed") {
+      return UI.showToast("Please assign a Lead Type.", "warning");
+    }
+    if (selectedType === "Bad Lead" && !selectedReason) {
+      return UI.showToast("Please select a failure reason.", "warning");
+    }
+
+    saveBtn.textContent = "Scrubbing...";
+    saveBtn.disabled = true;
+    saveBtn.style.opacity = "0.7";
+
+    try {
+      // 1. Build SharePoint Payload
+      const payload = { Lead_x0020_Type: selectedType };
+      let newStatus = lead.status;
+
+      if (selectedType === "Bad Lead") {
+        newStatus = selectedReason; // Swaps status to "Disconnected", "Suspended", etc.
+        payload.Status = newStatus;
+      }
+
+      // Setup Activity Log Entry for paper trail
+      const user = State.currentUser;
+      const activityEmail = (user && user.email) || "";
+      let actionString = `Scrubbed: ${selectedType}`;
+      if (selectedType === "Bad Lead") {
+        actionString += ` (${selectedReason})`;
+      }
+
+      const logEntry = {
+        LeadID: lead.id,
+        Title: lead.name || "Unknown Lead",
+        ActionType: actionString,
+        AgentEmail: activityEmail,
+        Notes: `Lead categorized as ${selectedType} during initial scrub.`,
+      };
+
+      // 2. Sequential Awaits! Ensure data commits properly
+      await Graph.updateLead(lead.id, payload);
+      await Graph.logActivity(logEntry);
+
+      // 3. Update Local RAM (Activity Log)
+      State.activityLog.push({
+        id: "local-" + Date.now(),
+        leadId: lead.id,
+        leadName: lead.name || "Unknown Lead",
+        agent: activityEmail,
+        agentEmail: activityEmail,
+        action: actionString,
+        notes: logEntry.Notes,
+        timestamp: new Date().toISOString(),
+      });
+
+      // 4. Update Local RAM (Lead State)
+      lead.leadType = selectedType;
+      if (selectedType === "Bad Lead") {
+        lead.status = newStatus;
+      }
+
+      UI.showToast("Lead scrubbed & routed!", "success");
+
+      // 5. Instantly refresh the UI to pop the card off the screen
+      if (typeof renderScrubHub === "function") renderScrubHub();
+    } catch (err) {
+      console.error("Scrub Error:", err);
+      UI.showToast("Failed to scrub: " + err.message, "error");
+      saveBtn.textContent = "Save & Scrub ✓";
+      saveBtn.disabled = false;
+      saveBtn.style.opacity = "1";
+    }
+  });
+
+  return clone;
+}
 // ============================================================
 //  ASSIGN LEADS (Admin only)
 // ============================================================
@@ -2538,7 +2758,6 @@ function renderAssignLeads() {
         <input type="checkbox" id="bulk-unworked-check" style="cursor:pointer; width:15px; height:15px;"> Unworked Only
       </label>
 
-      <!-- 🚀 NEW: Worked At Least Once Checkbox -->
       <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:#0D1B3E; cursor:pointer; margin-left:8px;">
         <input type="checkbox" id="bulk-worked-check" style="cursor:pointer; width:15px; height:15px;"> Worked At Least Once
       </label>
@@ -2756,6 +2975,12 @@ function renderAssignLeads() {
               ? `<span title="${escHtml(lead.previousAgents)}" style="font-size:10px; background:#f1f5f9; color:#64748b; padding:2px 6px; border-radius:4px; margin-left:8px; font-weight:600; cursor:help;">↺ ${prevArray.length} prev agents</span>`
               : "";
 
+          // 🚀 THE REGEX FIX: Clean class names for badges with spaces!
+          const safeTypeClass = (lead.leadType || "")
+            .toLowerCase()
+            .replace(/\s+/g, "-")
+            .replace(/[^a-z0-9-]/g, "");
+
           return `
         <tr>
           <td>
@@ -2763,7 +2988,7 @@ function renderAssignLeads() {
               <span class="lead-name">${escHtml(lead.name)}</span>${prevBadge}
             </div>
           </td>
-          <td>${lead.leadType ? `<span class="lead-type-badge lead-type-${(lead.leadType || "").toLowerCase()}">${escHtml(lead.leadType)}</span>` : "—"}</td>
+          <td>${lead.leadType ? `<span class="lead-type-badge lead-type-${safeTypeClass}">${escHtml(lead.leadType)}</span>` : "—"}</td>
           <td class="td-mono">${escHtml(lead.BTN || lead.btn || lead.phone || "—")}</td>
           <td>
             <span style="background: rgba(13, 27, 62, 0.08); color: #0d1b3e; padding: 4px 8px; border-radius: 4px; font-weight: 700; font-size: 11px; letter-spacing: 0.5px;">
@@ -3450,7 +3675,7 @@ function renderLeads() {
     `// ${State.leads.length} total`;
 
   // ==========================================
-  // 🚀 4. CSV IMPORTER WIRING
+  // 🚀 4. CSV IMPORTER WIRING (DYNAMIC TYPES)
   // ==========================================
   const importBtn = clone.getElementById("importLeadsBtn");
   const fileInput = clone.getElementById("leadFileInput");
@@ -3465,18 +3690,21 @@ function renderLeads() {
       modal.style.cssText =
         "background:#fff; padding:24px; border-radius:12px; width:320px; box-shadow:0 10px 25px rgba(0,0,0,0.2); display:flex; flex-direction:column; gap:16px;";
 
+      // 🚀 DYNAMIC INJECTION: Pulls directly from config.js and defaults to Unscrubbed
+      const dynamicTypeOptions = (Config.leadTypes || [])
+        .map(
+          (t) =>
+            `<option value="${t}" ${t === "Unscrubbed" ? "selected" : ""}>${t}</option>`,
+        )
+        .join("");
+
       modal.innerHTML = `
         <div>
           <h3 style="margin:0 0 4px 0; font-size:18px; color:#0D1B3E;">Upload Leads</h3>
           <p style="margin:0; font-size:13px; color:#666;">What type of leads are in this file?</p>
         </div>
         <select id="tempLeadType" class="filter-select" style="width:100%; padding:10px; border-radius:6px;">
-          <option value="OFS">OFS Leads</option>
-          <option value="MLR">MLR Leads</option>
-          <option value="Forced">Forced Leads</option>
-          <!-- 🚀 NEW D2D PRE-SCRUBBED TYPES -->
-          <option value="D2D TDM">D2D TDM</option>
-          <option value="D2D OFS">D2D OFS</option>
+          ${dynamicTypeOptions}
         </select>
         <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:8px;">
           <button id="cancelTypeBtn" class="btn-ghost" style="padding:8px 16px;">Cancel</button>
@@ -3574,7 +3802,6 @@ function renderLeads() {
       .map((t) => `<option value="${t}">${t}</option>`)
       .join("");
 
-    // 🚀 INJECTED: The new Delete Batch Trash Can Button
     agentFilter.parentNode.insertAdjacentHTML(
       "beforeend",
       `
@@ -3613,7 +3840,7 @@ function renderLeads() {
   const typeFilter = clone.querySelector("#filter-type");
   const sortFilter = clone.querySelector("#filter-sort");
   const resetFiltersBtn = clone.querySelector("#leads-reset-filters");
-  const deleteBatchBtn = clone.querySelector("#leads-delete-batch"); // 🚀 The New Button Pointer
+  const deleteBatchBtn = clone.querySelector("#leads-delete-batch");
 
   if (batchFilter && State.filters.batch)
     batchFilter.value = State.filters.batch;
@@ -3636,18 +3863,14 @@ function renderLeads() {
         return;
       }
 
-      // 🚀 THE WYSIWYG FIX:
-      // 1. Grab the base list respecting global filters (Search, Status, Agent)
       let baseLeads =
         typeof getFilteredLeads === "function"
           ? getFilteredLeads()
           : State.leads;
 
-      // 2. Grab the exact current values of the local dropdowns
       const selectedState = stateFilter ? stateFilter.value : "all";
       const selectedType = typeFilter ? typeFilter.value : "all";
 
-      // 3. Filter down so the trash can ONLY sees what the user sees
       const leadsToDelete = baseLeads.filter((l) => {
         const batchMatch = l._batchId === selectedBatch;
         const stateMatch =
@@ -3666,7 +3889,6 @@ function renderLeads() {
         return;
       }
 
-      // 1. Build the Safety Modal
       const overlay = document.createElement("div");
       overlay.style.cssText =
         "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(13, 27, 62, 0.6); z-index:9999; display:flex; align-items:center; justify-content:center; backdrop-filter: blur(3px);";
@@ -3692,7 +3914,6 @@ function renderLeads() {
       overlay.appendChild(modal);
       document.body.appendChild(overlay);
 
-      // 2. Modal Controls
       document.getElementById("cancelBatchDelBtn").onclick = () =>
         overlay.remove();
 
@@ -3705,7 +3926,6 @@ function renderLeads() {
         const idsToDelete = leadsToDelete.map((l) => l.id);
 
         try {
-          // 🚀 THE SOFT DELETE LOOP (With nested try/catch)
           const updatePromises = idsToDelete.map(async (id) => {
             try {
               await Graph.updateLead(id, { Status: "Deleted" });
@@ -3716,31 +3936,23 @@ function renderLeads() {
             }
           });
 
-          // Wait for all promises to resolve
           const results = await Promise.all(updatePromises);
-
-          // Filter out the successful ones
           const successfulIds = results
             .filter((res) => res.success === true)
             .map((res) => res.id);
-
           const failedCount = results.length - successfulIds.length;
 
-          // 3. Immediately wipe successful ones from the local State so the UI feels fast
           State.leads = State.leads.filter(
             (l) => !successfulIds.includes(l.id),
           );
 
-          // 4. Clean the local IndexedDB instantly
           for (const id of successfulIds) {
             await LocalDB.deleteItem("leads", id);
           }
 
-          // 5. Reset the batch filter so they don't look at an empty/broken table
           State.filters.batch = "all";
-
           overlay.remove();
-          renderLeads(); // Force the screen to redraw
+          renderLeads();
 
           if (failedCount > 0) {
             alert(
@@ -3855,7 +4067,6 @@ function renderLeads() {
       return batchMatch && stateMatch && typeMatch;
     });
 
-    // 🚀 BLAZING FAST SORT (Uses the cached variables)
     filtered.sort((a, b) => {
       if (selectedSort === "least_worked") {
         return a._prevCount - b._prevCount || b._time - a._time;
@@ -3890,7 +4101,6 @@ function renderLeads() {
     if (tableWrap) {
       tableWrap.replaceChildren(renderLeadsTable(displayLeads));
     }
-    // 🚀 NON-BLOCKING CHART RENDER: Paints the table instantly, calculates chart math next frame
     setTimeout(() => {
       PipelineInsights.updateLive(
         "insights-selector-main",
@@ -3914,7 +4124,6 @@ function renderLeads() {
     });
 
   const handleFilterChange = (e) => {
-    // 1. Instantly save the filter selections to state
     State.filters.search = searchInput ? searchInput.value : "";
     State.filters.status = statusFilter ? statusFilter.value : "all";
     State.filters.assignedTo = agentFilter ? agentFilter.value : "all";
@@ -3925,13 +4134,10 @@ function renderLeads() {
 
     currentPage = 1;
 
-    // If the Batch filter changed, update the cascading options instantly
     if (e && e.target === batchFilter) {
       updateDynamicDropdowns();
     }
 
-    // 🚀 THE PERFORMANCE FIX: Defer the table calculation to the next CPU cycle.
-    // This allows the dropdown menu to visually close smoothly before processing data.
     requestAnimationFrame(() => {
       setTimeout(() => {
         updateTable();
@@ -3945,7 +4151,7 @@ function renderLeads() {
       clearTimeout(searchTimeout);
       searchTimeout = setTimeout(() => {
         handleFilterChange(e);
-      }, 300); // Waits 300ms after the last keystroke before updating
+      }, 300);
     });
   }
   if (statusFilter) statusFilter.addEventListener("change", handleFilterChange);
@@ -3955,7 +4161,6 @@ function renderLeads() {
   if (typeFilter) typeFilter.addEventListener("change", handleFilterChange);
   if (sortFilter) sortFilter.addEventListener("change", handleFilterChange);
 
-  // 🚀 THE RESET LISTENER (Resets all inputs AND the global State object)
   if (resetFiltersBtn) {
     resetFiltersBtn.addEventListener("click", () => {
       if (searchInput) searchInput.value = "";
@@ -3981,7 +4186,6 @@ function renderLeads() {
   }
 
   updateDynamicDropdowns();
-
   mainContent.appendChild(clone);
 
   PipelineInsights.init(

@@ -60,7 +60,14 @@ const Config = {
   soldStatus: "Sold",
 
   // Lead types
-  leadTypes: ["OFS", "MLR"],
+  leadTypes: [
+    "Unscrubbed",
+    "OFS",
+    "Migrate Existing Customer",
+    "Migrate Voice Customer",
+    "3MO Free",
+    "Bad Lead",
+  ],
 
   // Current products options — alphabetical
   currentProducts: [

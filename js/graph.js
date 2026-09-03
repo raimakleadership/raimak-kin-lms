@@ -165,10 +165,6 @@ const Graph = (() => {
   }
 
   // ============================================================
-  //  LEADS
-  // ============================================================
-
-  // ============================================================
   //  LEADS (WITH 30-DAY CHECK & EXACT SHAREPOINT LIST COUNTING)
   // ============================================================
 
@@ -198,9 +194,9 @@ const Graph = (() => {
       isStaleCache = true; // No timestamp = First login ever
     }
 
-    // 🚀 STEP 3: GUARANTEED COLD BOOT TRIGGER
-    // Fires if RAM/DB has fewer than 1,000 leads OR user hasn't synced in >30 days
-    const isColdBoot = existingLeads.length < 1000 || isStaleCache;
+    // 🐛 THE FIX: Changed threshold from < 1000 to === 0
+    // Now it only forces a cold boot if the database is literally empty or the cache is 30+ days stale.
+    const isColdBoot = existingLeads.length === 0 || isStaleCache;
 
     const expandQuery = "expand=fields";
     let url =
@@ -258,9 +254,8 @@ const Graph = (() => {
 
     if (validTimestamps.length > 0) {
       const maxTime = Math.max(...validTimestamps);
-      // 🛡️ FRONTIER STORAGE KEY: Protected from VZ key collisions
       localStorage.setItem(
-        "RaimakLeadsLastSyncDate",
+        "RaimakKineticLeadsLastSyncDate",
         new Date(maxTime).toISOString(),
       );
     }
@@ -765,9 +760,6 @@ const Graph = (() => {
   }
 
   // ============================================================
-  //  ACTIVITY LOG
-  // ============================================================
-  // ============================================================
   //  ACTIVITY LOG (WITH COLD-BOOT STREAMING ENGINE)
   // ============================================================
 
@@ -806,8 +798,8 @@ const Graph = (() => {
       isStaleCache = true; // No timestamp = First login ever
     }
 
-    // 🚀 STEP 3: GUARANTEED COLD BOOT TRIGGER
-    const isColdBoot = existingLogs.length < 1000 || isStaleCache;
+    // 🐛 THE FIX: Changed threshold from < 1000 to === 0
+    const isColdBoot = existingLogs.length === 0 || isStaleCache;
 
     const selectedFields =
       "LeadID,LeadId,Title,LeadName,ActionType,Action,Activity,AgentEmail,Agent,Notes,Created";
@@ -836,7 +828,6 @@ const Graph = (() => {
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - 30);
 
-      // If it's a cold boot OR the existing sync date is too old, force the 30-day cutoff
       if (!applyFilterDate || new Date(applyFilterDate) < cutoff) {
         applyFilterDate = cutoff.toISOString();
         console.log(
@@ -845,7 +836,6 @@ const Graph = (() => {
       }
     }
 
-    // Apply the filter to the URL if a date was established
     if (applyFilterDate) {
       const safeDate = applyFilterDate.split(".")[0] + "Z";
       url += `&$filter=fields/Created gt '${safeDate}'`;
@@ -860,7 +850,6 @@ const Graph = (() => {
       raw = await getAllItems(url);
     }
 
-    // If no new items exist, we're done!
     if (raw.length === 0) {
       if (isDeltaRefresh) UI.showToast("✅ Logs are up to date.", "success");
       return { updatedLogs: existingLogs, newSyncDate: lastSyncDate };
@@ -881,15 +870,12 @@ const Graph = (() => {
       };
     });
 
-    // Save to IndexedDB if we didn't already stream it page-by-page
     if (!isColdBoot) {
       await LocalDB.saveItems("activity_logs", newLogs);
     }
 
-    // 🚀 STEP 6: Merge and Sort (Newest first)
     const finalizedLogs = [...newLogs.reverse(), ...existingLogs];
 
-    // 🚀 STEP 7: Update the Sync Date (High-Water Mark)
     const validTimestamps = newLogs
       .map((log) => new Date(log.timestamp).getTime())
       .filter((time) => !isNaN(time));
