@@ -46,8 +46,6 @@ const Config = {
     "3rd Contact",
     "Do Not Call",
     "Sold",
-    "Pending Order",
-    "FNQ",
     "Already has Fiber",
   ],
 
