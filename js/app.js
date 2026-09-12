@@ -2111,8 +2111,6 @@ function stageStatus(leadId, newStatus) {
 async function agentSaveAll(leadId) {
   const user = State.currentUser;
 
-  // (Removed _sessionWorkedLeads assignment from here - moved to try block)
-
   const lead = State.leads.find((l) => l.id === leadId);
   if (!lead) return;
 
@@ -2133,7 +2131,7 @@ async function agentSaveAll(leadId) {
   const cbr = (document.getElementById("feed-cbr") || {}).value || "";
   const btn = (document.getElementById("feed-btn") || {}).value || "";
   const gac = (document.getElementById("feed-gac") || {}).value || "";
-  const email = (document.getElementById("feed-email") || {}).value || ""; // 🚀 Grab Email
+  const email = (document.getElementById("feed-email") || {}).value || ""; 
   const soldByEl = document.getElementById("feed-sold-by");
   const soldByName = soldByEl ? soldByEl.value : "";
   let rawCallbackDate =
@@ -2155,7 +2153,6 @@ async function agentSaveAll(leadId) {
       notesEl.style.boxShadow = "0 0 8px rgba(239, 68, 68, 0.4)";
       notesEl.focus();
 
-      // Remove the red highlight after 2.5 seconds
       setTimeout(() => {
         notesEl.style.borderColor = "";
         notesEl.style.boxShadow = "";
@@ -2167,15 +2164,7 @@ async function agentSaveAll(leadId) {
     );
   }
 
-  // Validation (Terminal Bypass)
-  const isTerminal = Config.terminalStatuses.includes(newStatus);
-  if (!isTerminal) {
-    if (newStatus === Config.soldStatus && !soldByName)
-      return UI.showToast("Select Sold By", "error");
-    if (!mrc) return UI.showToast("Enter MRC", "error");
-    if (btn.replace(/\D/g, "").length !== 10)
-      return UI.showToast("Valid BTN required", "error");
-  }
+  // 🚀 STRICT VALIDATION BLOCK REMOVED HERE (Agents are no longer trapped by bad scrub data)
 
   // Note Stamping
   let notes = lead.notes || "";
@@ -2203,8 +2192,6 @@ async function agentSaveAll(leadId) {
     newStatus === Config.soldStatus ? soldByEmail : (user && user.email) || "";
 
   // 2. Setup Payload for SharePoint
-
-  // 🐛 FIX 2: The Rapid-Aging Timezone Bug
   const todayDate = new Date().toISOString();
 
   const saveFields = {
@@ -2218,7 +2205,7 @@ async function agentSaveAll(leadId) {
   if (cbr) saveFields["CBR"] = cbr;
   if (btn) saveFields["BTN"] = btn;
   if (gac) saveFields["GAC"] = gac;
-  if (email) saveFields["Email"] = email; // 🚀 Send Email to SharePoint
+  if (email) saveFields["Email"] = email; 
 
   saveFields["CallbackDateTime"] = rawCallbackDate
     ? new Date(rawCallbackDate).toISOString()
@@ -2244,16 +2231,15 @@ async function agentSaveAll(leadId) {
           : ""),
     };
 
-    // 🚀 THE RACE CONDITION FIX: Sequential Awaits!
+    // Sequential Awaits
     await Graph.updateLead(leadId, saveFields);
 
-    // 🐛 FIX 1: The Premature Timeout Bug
     window._sessionWorkedLeads = window._sessionWorkedLeads || new Map();
     window._sessionWorkedLeads.set(leadId, Date.now());
 
     await Graph.logActivity(logEntry);
 
-    // LOCAL STATE: Fixed leadName mapping
+    // LOCAL STATE
     State.activityLog.push({
       id: "local-" + Date.now(),
       leadId: leadId,
@@ -2273,10 +2259,9 @@ async function agentSaveAll(leadId) {
     if (cbr) lead.cbr = cbr;
     if (btn) lead.btn = btn;
     if (gac) lead.gac = gac;
-    if (email) lead.email = email; // 🚀 Save Email to local memory
+    if (email) lead.email = email; 
     lead.callbackAt = rawCallbackDate || null;
 
-    // 🐛 FIX 3: The Zombie Queue Bug
     lead.lastContacted = todayDate;
 
     Points.awardPoints(newStatus, leadId);
