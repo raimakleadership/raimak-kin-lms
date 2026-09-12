@@ -538,11 +538,13 @@ const Graph = (() => {
     const f = item.fields || {};
     const first = f.FirstName || f.First_x0020_Name || "";
     const last = f.LastName || f.Last_x0020_Name || "";
-    const name = (first + " " + last).trim() || f.Title || f.LeadName || "";
+
+    // 🚀 FIX: Prevent customers from being named by their ID number
+    const name = (first + " " + last).trim() || f.LeadName || "";
 
     return {
       id: item.id, // The essential SharePoint Row ID
-      kineticLeadId: f.LeadID || "", // The Campaign's unique LeadID
+      kineticLeadId: f.Title || f.LeadID || "", // 🚀 THE FIX: Catches the stubborn SharePoint 'Title' column
       name: name,
       firstName: first,
       lastName: last,
@@ -560,7 +562,6 @@ const Graph = (() => {
       city: f.WorkCity || f.City || "",
       state: f.State || "",
       zip: f.Zip || f.ZipCode || "",
-      eventsScheduled: f.Events_x0020_scheduled || "",
       callbackAt: f.CallbackDateTime || null,
       lastContacted: f.LastTouchedOn || f.LastContacted || null,
       createdAt: item.createdDateTime || f.Created || null,

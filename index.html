@@ -1007,6 +1007,9 @@
       </div>
     </template>
 
+    <!-- ========================================== -->
+    <!-- TEMPLATE: LEAD FEED CARD (MY LEADS)        -->
+    <!-- ========================================== -->
     <template id="tmpl-lead-feed-card">
       <div
         id="feed-card-empty"
@@ -1074,16 +1077,7 @@
 
         <div class="feed-customer-info">
           <div class="form-group">
-            <label>GAC (Global Account)</label>
-            <input
-              type="text"
-              id="feed-gac"
-              class="form-input"
-              placeholder="Enter GAC"
-            />
-          </div>
-          <div class="form-group">
-            <label>BTN (Primary)</label>
+            <label>BTN</label>
             <input
               type="text"
               id="feed-btn"
@@ -1092,7 +1086,16 @@
             />
           </div>
           <div class="form-group">
-            <label>CBR (Contact)</label>
+            <label>GAC</label>
+            <input
+              type="text"
+              id="feed-gac"
+              class="form-input"
+              placeholder="Enter GAC"
+            />
+          </div>
+          <div class="form-group">
+            <label>CBR</label>
             <input
               type="text"
               id="feed-cbr"
@@ -1101,12 +1104,12 @@
             />
           </div>
           <div class="form-group">
-            <label>Price (MRC)</label>
+            <label>Email</label>
             <input
-              type="text"
-              id="feed-mrc"
+              type="email"
+              id="feed-email"
               class="form-input"
-              placeholder="e.g. $104.49"
+              placeholder="customer@email.com"
             />
           </div>
           <div class="form-group" style="grid-column: 1 / -1">
@@ -1864,23 +1867,36 @@
       <div class="modal-form">
         <div class="form-section-title">Identity & Contact</div>
         <div class="form-row">
-          <div class="form-group">
+          <div class="form-group" style="flex: 1">
             <label>First Name *</label
             ><input type="text" id="f-firstname" class="form-input" />
           </div>
-          <div class="form-group">
+          <div class="form-group" style="flex: 1">
             <label>Last Name *</label
             ><input type="text" id="f-lastname" class="form-input" />
+          </div>
+          <div class="form-group" style="flex: 1.5">
+            <label>Email</label
+            ><input
+              type="email"
+              id="f-email"
+              class="form-input"
+              placeholder="customer@email.com"
+            />
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label>BTN (Billing #) *</label
+            <label>BTN (Primary #) *</label
             ><input type="tel" id="f-btn" class="form-input" />
           </div>
           <div class="form-group">
             <label>CBR (Contact #)</label
             ><input type="tel" id="f-cbr" class="form-input" />
+          </div>
+          <div class="form-group">
+            <label>GAC</label
+            ><input type="text" id="f-gac" class="form-input" />
           </div>
         </div>
 
@@ -1941,18 +1957,11 @@
               placeholder="$0.00"
             />
           </div>
-          <div class="form-group" style="margin: 0; flex: 1">
+          <div class="form-group" style="margin: 0; flex: 2">
             <label>Products</label
             ><select id="f-products" class="form-input">
               <option value="">Select...</option>
             </select>
-          </div>
-          <div class="form-group" style="margin: 0; flex: 2">
-            <label>AutoPay</label>
-            <div
-              id="f-autopay-container"
-              style="display: flex; gap: 12px; margin-top: 4px"
-            ></div>
           </div>
         </div>
 
@@ -2820,20 +2829,98 @@
           </span>
         </div>
 
-        <!-- Name & Meta -->
-        <div class="feed-name" id="sc-name" style="margin-bottom: 8px">
+        <!-- Name & Meta (ID, BTN, CBR, GAC) -->
+        <div class="feed-name" id="sc-name" style="margin-bottom: 4px">
           Customer Name
         </div>
         <div
           class="feed-meta-row"
           id="sc-meta-container"
-          style="margin-bottom: 16px"
+          style="margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 8px"
         >
-          <!-- BTN, CBR, GAC injected here via JS -->
+          <!-- Badges injected here via JS -->
         </div>
 
-        <!-- Scrubbing Controls (Uses your standard grid) -->
-        <div class="feed-customer-info" style="align-items: flex-start">
+        <!-- STANDARD LEAD INPUTS -->
+        <div class="feed-customer-info">
+          <div class="form-group">
+            <label>BTN</label>
+            <input
+              type="text"
+              id="sc-btn"
+              class="form-input"
+              placeholder="Enter BTN"
+            />
+          </div>
+          <div class="form-group">
+            <label>GAC</label>
+            <input
+              type="text"
+              id="sc-gac"
+              class="form-input"
+              placeholder="Enter GAC"
+            />
+          </div>
+          <div class="form-group">
+            <label>CBR</label>
+            <input
+              type="text"
+              id="sc-cbr"
+              class="form-input"
+              placeholder="Enter CBR"
+            />
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input
+              type="email"
+              id="sc-email"
+              class="form-input"
+              placeholder="customer@email.com"
+            />
+          </div>
+          <div class="form-group">
+            <label>Package / Current Products</label>
+            <select id="sc-products" class="form-input">
+              <option value="">Select products...</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Notes Section -->
+        <div style="margin-top: 16px">
+          <span class="feed-label">Notes</span>
+          <div
+            id="sc-past-notes"
+            style="
+              display: none;
+              background: #f4f7fd;
+              border: 1px solid #d0dcf0;
+              border-radius: 6px;
+              padding: 10px 14px;
+              margin-top: 6px;
+              margin-bottom: 8px;
+              max-height: 140px;
+              overflow-y: auto;
+            "
+          ></div>
+          <textarea
+            id="sc-notes"
+            class="form-input form-textarea"
+            placeholder="Add a note from the scrub..."
+          ></textarea>
+        </div>
+
+        <!-- Scrubbing Controls -->
+        <div
+          class="feed-customer-info"
+          style="
+            align-items: flex-start;
+            margin-top: 16px;
+            border-top: 1px solid #e8eff8;
+            padding-top: 16px;
+          "
+        >
           <!-- Step 1: Lead Type -->
           <div class="form-group" style="flex: 1">
             <label
@@ -2860,7 +2947,7 @@
             </select>
           </div>
 
-          <!-- Step 2: Bad Lead Reason (Hidden by Default) -->
+          <!-- Step 2: Bad Lead Reason -->
           <div
             class="form-group"
             id="sc-bad-reason-container"
@@ -2890,15 +2977,10 @@
           </div>
         </div>
 
-        <!-- Action Row (Uses your standard button layout) -->
+        <!-- Action Row -->
         <div
           class="feed-note-row"
-          style="
-            margin-top: 16px;
-            justify-content: flex-end;
-            border-top: 1px solid #e8eff8;
-            padding-top: 16px;
-          "
+          style="margin-top: 16px; justify-content: flex-end"
         >
           <button
             id="sc-save-btn"

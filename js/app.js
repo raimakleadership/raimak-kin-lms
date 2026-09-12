@@ -1705,7 +1705,10 @@ function renderLeadFeedCard(myLeads) {
   const typeBadge = clone.getElementById("feed-lead-type");
   if (lead.leadType) {
     typeBadge.textContent = lead.leadType;
-    typeBadge.className = `lead-type-badge lead-type-${lead.leadType.toLowerCase()}`;
+    typeBadge.className = `lead-type-badge lead-type-${lead.leadType
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "")}`;
   } else {
     typeBadge.style.display = "none";
   }
@@ -1751,8 +1754,19 @@ function renderLeadFeedCard(myLeads) {
     }
   }
 
-  // 🚀 KINETIC META ROW: Only Address badge!
+  // 🚀 KINETIC META ROW: Sales Rabbit ID + Address
   let metaHtml = "";
+
+  // 🚀 THE CACHE FIX: Checks every possible name the old LocalDB might have saved it as
+  const salesRabbitId =
+    lead.kineticLeadId ||
+    lead.Title ||
+    lead.title ||
+    lead.LeadID ||
+    lead.id ||
+    "Unknown ID";
+  metaHtml += `<span class="feed-meta" style="margin-right: 12px; font-family: var(--font-mono); font-weight: 700; color: #0369a1; background: #e0f2fe; padding: 2px 8px; border-radius: 4px; border: 1px solid #bae6fd;">🏷️ Sales Rabbit ID: ${escHtml(salesRabbitId)}</span>`;
+
   if (lead.address) {
     metaHtml += `<span class="feed-meta">📍 ${escHtml(lead.address)}${lead.city ? ", " + escHtml(lead.city) : ""}${lead.state ? " " + escHtml(lead.state) : ""}${lead.zip ? " " + escHtml(lead.zip) : ""}</span>`;
   }
@@ -1761,9 +1775,6 @@ function renderLeadFeedCard(myLeads) {
   // 🚀 POPULATE INPUT BOXES
   const btnEl = clone.getElementById("feed-btn");
   if (btnEl) btnEl.value = lead.btn || "";
-
-  const mrcEl = clone.getElementById("feed-mrc");
-  if (mrcEl) mrcEl.value = lead.currentMRC || "";
 
   const cbrEl = clone.getElementById("feed-cbr");
   if (cbrEl) cbrEl.value = lead.cbr || "";
@@ -1933,10 +1944,9 @@ function renderLeadFeedCard(myLeads) {
 
   clone.getElementById("feed-save-btn").onclick = () => agentSaveAll(lead.id);
 
-  // 🚀 KINETIC DRAFTS: Added Email and GAC
+  // KINETIC DRAFTS
   const inputsToDraft = [
     { id: "feed-btn", key: "btn" },
-    { id: "feed-mrc", key: "mrc" },
     { id: "feed-cbr", key: "cbr" },
     { id: "feed-gac", key: "gac" },
     { id: "feed-email", key: "email" },
@@ -2526,50 +2536,127 @@ function renderScrubCard(lead) {
   const template = document.getElementById("tmpl-scrub-card");
   const clone = template.content.cloneNode(true);
 
-  // 🚀 ANTI-COLLISION: Suffix IDs with the unique lead ID so they don't overlap in the list
-  const typeSelect = clone.getElementById("sc-type-select");
-  const reasonContainer = clone.getElementById("sc-bad-reason-container");
-  const reasonSelect = clone.getElementById("sc-bad-reason-select");
-  const saveBtn = clone.getElementById("sc-save-btn");
+  // 1. Gather all dynamic elements
+  const elements = {
+    typeSelect: clone.getElementById("sc-type-select"),
+    reasonContainer: clone.getElementById("sc-bad-reason-container"),
+    reasonSelect: clone.getElementById("sc-bad-reason-select"),
+    saveBtn: clone.getElementById("sc-save-btn"),
+    btn: clone.getElementById("sc-btn"),
+    gac: clone.getElementById("sc-gac"),
+    cbr: clone.getElementById("sc-cbr"),
+    email: clone.getElementById("sc-email"),
+    mrc: clone.getElementById("sc-mrc"),
+    products: clone.getElementById("sc-products"),
+    notes: clone.getElementById("sc-notes"),
+    pastNotes: clone.getElementById("sc-past-notes"),
+    name: clone.getElementById("sc-name"),
+    address: clone.getElementById("sc-address"),
+    metaContainer: clone.getElementById("sc-meta-container"),
+  };
 
-  typeSelect.id = `sc-type-select-${lead.id}`;
-  reasonContainer.id = `sc-bad-reason-container-${lead.id}`;
-  reasonSelect.id = `sc-bad-reason-select-${lead.id}`;
-  saveBtn.id = `sc-save-btn-${lead.id}`;
+  // 🚀 ANTI-COLLISION: Append the unique lead ID to every single element
+  Object.keys(elements).forEach((key) => {
+    if (elements[key]) elements[key].id = `${elements[key].id}-${lead.id}`;
+  });
 
-  // Populate Customer Data
-  clone.getElementById("sc-name").textContent = lead.name || "Unknown Lead";
+  // 2. Populate Static Customer Data
+  elements.name.textContent = lead.name || "Unknown Lead";
 
-  const addressEl = clone.getElementById("sc-address");
   if (lead.address) {
-    addressEl.textContent = `📍 ${lead.address}${lead.city ? ", " + lead.city : ""}${lead.state ? " " + lead.state : ""}${lead.zip ? " " + lead.zip : ""}`;
+    elements.address.textContent = `📍 ${lead.address}${lead.city ? ", " + lead.city : ""}${lead.state ? " " + lead.state : ""}${lead.zip ? " " + lead.zip : ""}`;
   } else {
-    addressEl.style.display = "none";
+    elements.address.style.display = "none";
   }
 
+  // 🚀 INJECT KINETIC META INFO (Sales Rabbit ID + the rest)
   let metaHtml = "";
+
+  // 🚀 THE FIX: Safely grabs the exact Kinetic Lead ID we mapped in graph.js
+  const salesRabbitId = lead.kineticLeadId || lead.id || "Unknown ID";
+  metaHtml += `<span class="feed-meta" style="margin-right: 12px; font-family: var(--font-mono); font-weight: 700; color: #0369a1; background: #e0f2fe; padding: 2px 8px; border-radius: 4px; border: 1px solid #bae6fd;">🏷️ Sales Rabbit ID: ${escHtml(salesRabbitId)}</span>`;
+
   if (lead.btn)
     metaHtml += `<span class="feed-meta" style="margin-right:12px;">📱 BTN: ${escHtml(lead.btn)}</span>`;
   if (lead.cbr)
     metaHtml += `<span class="feed-meta" style="margin-right:12px;">📞 CBR: ${escHtml(lead.cbr)}</span>`;
   if (lead.gac)
     metaHtml += `<span class="feed-meta" style="margin-right:12px;">🔢 GAC: ${escHtml(lead.gac)}</span>`;
-  clone.getElementById("sc-meta-container").innerHTML = metaHtml;
+
+  if (elements.metaContainer) elements.metaContainer.innerHTML = metaHtml;
+
+  // 3. Populate Input Boxes with existing data (if available)
+  if (elements.btn) elements.btn.value = lead.btn || "";
+  if (elements.gac) elements.gac.value = lead.gac || "";
+  if (elements.cbr) elements.cbr.value = lead.cbr || "";
+  if (elements.email) elements.email.value = lead.email || "";
+  if (elements.mrc) elements.mrc.value = lead.currentMRC || "";
+
+  // Populate the Products Dropdown dynamically from config
+  if (elements.products) {
+    Config.currentProducts.forEach((p) => {
+      const option = document.createElement("option");
+      option.value = p;
+      option.textContent = p;
+      if (lead.currentProducts === p) option.selected = true;
+      elements.products.appendChild(option);
+    });
+  }
+
+  // Populate Past Notes (Formats them identically to the lead cards)
+  if (lead.notes && lead.notes.trim() && elements.pastNotes) {
+    elements.pastNotes.style.display = "block";
+    const notesHtml = lead.notes
+      .split("\n")
+      .filter((l) => l.trim())
+      .map((line) => {
+        const match = line.match(/^\[(\d{2}\/\d{2}(?:\/\d{2})?)(.*?)\]\s*(.*)/);
+        if (match) {
+          const date = match[1];
+          const agent = match[2] ? match[2].replace(/^\s*-\s*/, "") : "";
+          const text = match[3];
+          return `
+          <div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #E8EFF8">
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:3px">
+              <span style="font-family:var(--font-mono);font-size:10px;color:#2563B0;font-weight:700;background:#E8F0FF;padding:1px 6px;border-radius:3px">${date}</span>
+              ${agent ? `<span style="font-family:var(--font-mono);font-size:10px;color:#6B85B0">${escHtml(agent)}</span>` : ""}
+            </div>
+            <span style="font-size:13px;color:#1A2640">${escHtml(text)}</span>
+          </div>`;
+        }
+        return `
+        <div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #E8EFF8">
+          <div style="margin-bottom:3px"><span style="font-family:var(--font-mono);font-size:10px;color:#8EA5C8;background:#F4F7FD;padding:1px 6px;border-radius:3px">Legacy note</span></div>
+          <span style="font-size:13px;color:#4A6080">${escHtml(line)}</span>
+        </div>`;
+      })
+      .join("");
+    elements.pastNotes.innerHTML = notesHtml;
+  }
 
   // 🔄 CONDITIONAL UI: Show/Hide the "Bad Reason" box
-  typeSelect.addEventListener("change", (e) => {
+  elements.typeSelect.addEventListener("change", (e) => {
     if (e.target.value === "Bad Lead") {
-      reasonContainer.style.display = "block";
+      elements.reasonContainer.style.display = "block";
     } else {
-      reasonContainer.style.display = "none";
-      reasonSelect.value = "";
+      elements.reasonContainer.style.display = "none";
+      elements.reasonSelect.value = "";
     }
   });
 
-  // 💾 ROBUST SAVE LOGIC (Mirrors agentSaveAll mechanics)
-  saveBtn.addEventListener("click", async () => {
-    const selectedType = typeSelect.value;
-    const selectedReason = reasonSelect.value;
+  // 💾 SAVE LOGIC
+  elements.saveBtn.addEventListener("click", async () => {
+    const selectedType = elements.typeSelect.value;
+    const selectedReason = elements.reasonSelect.value;
+
+    // Grab all input values
+    const newBtn = elements.btn ? elements.btn.value : "";
+    const newGac = elements.gac ? elements.gac.value : "";
+    const newCbr = elements.cbr ? elements.cbr.value : "";
+    const newEmail = elements.email ? elements.email.value : "";
+    const newMrc = elements.mrc ? elements.mrc.value : "";
+    const newProducts = elements.products ? elements.products.value : "";
+    const newNoteText = elements.notes ? elements.notes.value.trim() : "";
 
     // Validation
     if (!selectedType || selectedType === "Unscrubbed") {
@@ -2579,9 +2666,9 @@ function renderScrubCard(lead) {
       return UI.showToast("Please select a failure reason.", "warning");
     }
 
-    saveBtn.textContent = "Scrubbing...";
-    saveBtn.disabled = true;
-    saveBtn.style.opacity = "0.7";
+    elements.saveBtn.textContent = "Scrubbing...";
+    elements.saveBtn.disabled = true;
+    elements.saveBtn.style.opacity = "0.7";
 
     try {
       // 1. Build SharePoint Payload
@@ -2589,8 +2676,33 @@ function renderScrubCard(lead) {
       let newStatus = lead.status;
 
       if (selectedType === "Bad Lead") {
-        newStatus = selectedReason; // Swaps status to "Disconnected", "Suspended", etc.
+        newStatus = selectedReason;
         payload.Status = newStatus;
+      }
+
+      // Add the text inputs to the payload
+      if (newBtn) payload.BTN = newBtn;
+      if (newGac) payload.GAC = newGac;
+      if (newCbr) payload.CBR = newCbr;
+      if (newEmail) payload.Email = newEmail;
+      if (newMrc) payload["MonthlyRecurringCharge_x0028_MRC"] = newMrc;
+      if (newProducts) payload.CurrentProducts = newProducts;
+
+      // Note stamping logic
+      let finalNotes = lead.notes || "";
+      if (newNoteText) {
+        const today = new Date();
+        const dateStamp =
+          (today.getMonth() + 1).toString().padStart(2, "0") +
+          "/" +
+          today.getDate().toString().padStart(2, "0") +
+          "/" +
+          String(today.getFullYear()).slice(-2);
+        const user = State.currentUser;
+        const agentTag = user && user.name ? " - " + user.name : "";
+        const stamped = `[${dateStamp}${agentTag}] Scrubbed - ${newNoteText}`;
+        finalNotes = finalNotes ? stamped + "\n" + finalNotes : stamped;
+        payload.Notes = finalNotes;
       }
 
       // Setup Activity Log Entry for paper trail
@@ -2606,7 +2718,9 @@ function renderScrubCard(lead) {
         Title: lead.name || "Unknown Lead",
         ActionType: actionString,
         AgentEmail: activityEmail,
-        Notes: `Lead categorized as ${selectedType} during initial scrub.`,
+        Notes: newNoteText
+          ? `Lead categorized as ${selectedType}. Note: ${newNoteText}`
+          : `Lead categorized as ${selectedType} during initial scrub.`,
       };
 
       // 2. Sequential Awaits! Ensure data commits properly
@@ -2627,9 +2741,16 @@ function renderScrubCard(lead) {
 
       // 4. Update Local RAM (Lead State)
       lead.leadType = selectedType;
-      if (selectedType === "Bad Lead") {
-        lead.status = newStatus;
-      }
+      if (selectedType === "Bad Lead") lead.status = newStatus;
+
+      // Update all local input fields
+      if (newBtn) lead.btn = newBtn;
+      if (newGac) lead.gac = newGac;
+      if (newCbr) lead.cbr = newCbr;
+      if (newEmail) lead.email = newEmail;
+      if (newMrc) lead.currentMRC = newMrc;
+      if (newProducts) lead.currentProducts = newProducts;
+      if (newNoteText) lead.notes = finalNotes;
 
       UI.showToast("Lead scrubbed & routed!", "success");
 
@@ -2638,9 +2759,9 @@ function renderScrubCard(lead) {
     } catch (err) {
       console.error("Scrub Error:", err);
       UI.showToast("Failed to scrub: " + err.message, "error");
-      saveBtn.textContent = "Save & Scrub ✓";
-      saveBtn.disabled = false;
-      saveBtn.style.opacity = "1";
+      elements.saveBtn.textContent = "Save & Scrub ✓";
+      elements.saveBtn.disabled = false;
+      elements.saveBtn.style.opacity = "1";
     }
   });
 
@@ -7212,6 +7333,10 @@ function renderLeadModal(lead) {
   clone.getElementById("f-firstname").value = safeVal(lead?.firstName);
   clone.getElementById("f-lastname").value = safeVal(lead?.lastName);
 
+  // 🚀 THE KINETIC META FIX: Email and GAC Added
+  clone.getElementById("f-email").value = safeVal(lead?.email);
+  clone.getElementById("f-gac").value = safeVal(lead?.gac);
+
   // Maps BTN securely, falling back to legacy phone data if needed
   clone.getElementById("f-btn").value = safeVal(
     lead?.BTN || lead?.btn || lead?.phone,
@@ -7266,20 +7391,7 @@ function renderLeadModal(lead) {
     productsSelect.appendChild(opt);
   });
 
-  // 5. Build AutoPay Radios
-  // 🛡️ THE FIX: Set text color to #cbd5e1 (slate-300) so it's readable on dark
-  const autopayContainer = clone.getElementById("f-autopay-container");
-  ["ACH - Debit Card", "ACH - Credit Card", "No Auto Pay"].forEach((opt) => {
-    const isChecked = lead && lead.autoPay === opt ? "checked" : "";
-    autopayContainer.innerHTML += `
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:#cbd5e1;">
-        <input type="radio" name="f-autopay" value="${opt}" ${isChecked} style="accent-color:#0ea5e9;width:13px;height:13px">
-        ${opt}
-      </label>`;
-  });
-
-  // 6. Notes History Parser
-  // 🛡️ THE FIX: Replaced light mode backgrounds with translucent dark slate
+  // 5. Notes History Parser
   const notesHistory = clone.getElementById("modal-notes-history");
   if (lead && lead.notes && lead.notes.trim()) {
     const notesHtml = lead.notes
@@ -7315,7 +7427,7 @@ function renderLeadModal(lead) {
     notesHistory.innerHTML = `<div style="font-size:12px;color:#64748b;margin-bottom:8px;font-style:italic;">No notes yet.</div>`;
   }
 
-  // 7. Mount & Display
+  // 6. Mount & Display
   modalContainer.appendChild(clone);
   document.getElementById("modal-overlay").style.display = "flex";
 }
@@ -7346,27 +7458,122 @@ async function submitAddLead() {
 }
 
 async function submitEditLead() {
-  const fields = collectLeadForm();
-  if (!fields) return;
-  const agentName = fields._agentName;
-  delete fields._agentName;
-  setLoading(true);
+  const id = State.editingLeadId;
+  const lead = State.leads.find((l) => l.id === id);
+  if (!lead) return;
+
+  const submitBtn = document.getElementById("modal-submit-btn");
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Saving...";
+    submitBtn.style.opacity = "0.7";
+  }
+
   try {
-    await Graph.updateLead(State.editingLeadId, fields);
-    if (agentName) await Graph.assignAgent(State.editingLeadId, agentName);
-    await Graph.logActivity({
-      LeadID: State.editingLeadId,
-      Title: fields.Title,
-      ActionType: "Lead Updated",
-      AgentEmail: (State.currentUser && State.currentUser.email) || "",
-    });
-    await refreshData();
+    // 1. Grab all values from the UI
+    const payload = {
+      FirstName: (document.getElementById("f-firstname").value || "").trim(),
+      LastName: (document.getElementById("f-lastname").value || "").trim(),
+      Email: (document.getElementById("f-email").value || "").trim(), // 🚀 New Email Field
+      BTN: (document.getElementById("f-btn").value || "").trim(),
+      CBR: (document.getElementById("f-cbr").value || "").trim(),
+      GAC: (document.getElementById("f-gac").value || "").trim(), // 🚀 New GAC Field
+      WorkAddress: (document.getElementById("f-address").value || "").trim(),
+      WorkCity: (document.getElementById("f-city").value || "").trim(),
+      State: (document.getElementById("f-state").value || "").trim(),
+      Zip: (document.getElementById("f-zip").value || "").trim(),
+      Lead_x0020_Type: (
+        document.getElementById("f-leadtype").value || ""
+      ).trim(),
+      Status: (document.getElementById("f-status").value || "New").trim(),
+      Agent_x0020_Assigned: (
+        document.getElementById("f-assigned").value || ""
+      ).trim(),
+      MonthlyRecurringCharge_x0028_MRC: (
+        document.getElementById("f-mrc").value || ""
+      ).trim(),
+      CurrentProducts: (
+        document.getElementById("f-products").value || ""
+      ).trim(),
+    };
+
+    const dateVal = document.getElementById("f-lastcontacted").value;
+    if (dateVal) {
+      payload.LastTouchedOn = new Date(dateVal).toISOString();
+    }
+
+    // 2. Handle note appending safely without erasing old notes
+    const newNote = (document.getElementById("f-notes").value || "").trim();
+    let finalNotes = lead.notes || "";
+
+    if (newNote) {
+      const today = new Date();
+      const dateStamp =
+        (today.getMonth() + 1).toString().padStart(2, "0") +
+        "/" +
+        today.getDate().toString().padStart(2, "0") +
+        "/" +
+        String(today.getFullYear()).slice(-2);
+      const user = State.currentUser;
+      const agentTag = user && user.name ? " - " + user.name : "";
+      const stamped = `[${dateStamp}${agentTag}] Edited - ${newNote}`;
+      finalNotes = finalNotes ? stamped + "\n" + finalNotes : stamped;
+      payload.Notes = finalNotes;
+    }
+
+    // 3. Send update to SharePoint
+    await Graph.updateLead(id, payload);
+
+    // 4. Update Local RAM so the UI refreshes perfectly without an API recall
+    lead.firstName = payload.FirstName;
+    lead.lastName = payload.LastName;
+    lead.name =
+      (payload.FirstName + " " + payload.LastName).trim() || lead.name;
+    lead.email = payload.Email; // 🚀 Save Email to RAM
+    lead.btn = payload.BTN;
+    lead.cbr = payload.CBR;
+    lead.gac = payload.GAC; // 🚀 Save GAC to RAM
+    lead.address = payload.WorkAddress;
+    lead.city = payload.WorkCity;
+    lead.state = payload.State;
+    lead.zip = payload.Zip;
+    lead.leadType = payload.Lead_x0020_Type;
+    lead.status = payload.Status;
+    lead.assignedTo = payload.Agent_x0020_Assigned;
+    lead.currentMRC = payload.MonthlyRecurringCharge_x0028_MRC;
+    lead.currentProducts = payload.CurrentProducts;
+    if (newNote) lead.notes = finalNotes;
+    if (payload.LastTouchedOn) lead.lastContacted = payload.LastTouchedOn;
+
+    UI.showToast("Lead updated successfully!", "success");
     closeModal();
-    UI.showToast("Lead updated!", "success");
-  } catch (err) {
-    UI.showToast("Failed: " + err.message, "error");
-  } finally {
-    setLoading(false);
+
+    // 5. Redraw whatever screen the user is currently looking at
+    if (State.currentView === "admin" && typeof renderLeads === "function")
+      renderLeads();
+    else if (
+      State.currentView === "assign" &&
+      typeof renderAssignLeads === "function"
+    )
+      renderAssignLeads();
+    else if (
+      State.currentView === "myleads" &&
+      typeof renderMyLeads === "function"
+    )
+      renderMyLeads();
+    else if (
+      State.currentView === "scrubhub" &&
+      typeof renderScrubHub === "function"
+    )
+      renderScrubHub();
+  } catch (error) {
+    console.error("Edit Lead Error:", error);
+    UI.showToast("Failed to edit lead: " + error.message, "error");
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Save Changes";
+      submitBtn.style.opacity = "1";
+    }
   }
 }
 
