@@ -74,6 +74,8 @@ const Config = {
     "Internet + VAS",
     "Home Phone",
     "Home Phone + VAS",
+    "Internet + Phone",
+    "Internet + Phone + VAS",
   ],
 
   leadSources: [
