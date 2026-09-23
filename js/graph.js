@@ -31,6 +31,7 @@ const Graph = (() => {
     const fetchOpts = {
       method: method,
       headers: headers,
+      cache: "no-store",
     };
 
     // If a body was passed, ensure it is stringified
@@ -301,7 +302,7 @@ const Graph = (() => {
         <div class="card" style="max-width: 440px; width: 100%; padding: 32px; text-align: center; border: 1px solid rgba(0, 212, 255, 0.3); background: rgba(13, 27, 62, 0.85); box-shadow: 0 0 50px rgba(0, 212, 255, 0.2); border-radius: 16px;">
           <div style="font-size: 48px; margin-bottom: 16px;">⚡</div>
           <h2 style="font-family: var(--font-head, sans-serif); font-size: 24px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; color: #ffffff;">
-            Caching Frontier Floor Data
+            Caching Kinetic Activity Data
           </h2>
           <p style="color: #94a3b8; font-size: 13px; margin-bottom: 24px; line-height: 1.5;">
             Downloading active leads to your device for instant offline search and zero-lag dialing. This only runs on first login or after 30 days away.
