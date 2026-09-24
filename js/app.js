@@ -2786,13 +2786,12 @@ async function renderAssignLeads() {
   setLoading(true);
   try {
     const lastSyncDate = localStorage.getItem("RaimakKineticLeadsLastSyncDate");
-    UI.showToast("Syncing leads...", "info");
     State.leads = await Graph.getLeads(lastSyncDate, State.leads);
   } catch (err) {
     console.error("Delta Sync Error:", err);
     setLoading(false);
     UI.showToast("Cannot proceed: Live sync failed", "error");
-    return; // 💀 Hard Stop
+    return;
   }
   setLoading(false);
 
@@ -2974,9 +2973,6 @@ async function renderAssignLeads() {
   const countDisplay = document.getElementById("bulk-type-count");
   const resetFiltersBtn = document.getElementById("assign-reset-filters");
 
-  // ==========================================
-  // 🧠 CASCADING DROPDOWNS
-  // ==========================================
   function updateDynamicDropdowns() {
     const selectedBatch = batchSelect ? batchSelect.value : "all";
     const currentType = typeSelect ? typeSelect.value : "all";
@@ -3022,9 +3018,6 @@ async function renderAssignLeads() {
     }
   }
 
-  // ==========================================
-  // 🧠 TABLE RENDERING & MATH
-  // ==========================================
   function updateTableAndMath() {
     const selectedType = typeSelect ? typeSelect.value : "all";
     const selectedState = stateSelect ? stateSelect.value : "all";
@@ -3195,6 +3188,10 @@ async function renderAssignLeads() {
       let callbackCount = 0;
       let outOfHoursCount = 0;
 
+      // 🚀 THE FIX: Store the names for the copy-paste modal
+      let unworkedNames = [];
+      let callbackNames = [];
+
       const now = new Date();
 
       State.leads.forEach((lead) => {
@@ -3252,8 +3249,10 @@ async function renderAssignLeads() {
           outOfHoursCount++;
         } else if (isDueCallback) {
           callbackCount++;
+          callbackNames.push(lead.name); // Store callback names
         } else {
           unworkedCount++;
+          unworkedNames.push(lead.name); // Store unworked names
         }
       });
 
@@ -3268,6 +3267,11 @@ async function renderAssignLeads() {
             : "🟢 Ready for Leads";
         readinessBadge.style.backgroundColor = "rgba(16, 185, 129, 0.15)";
         readinessBadge.style.color = "#059669";
+
+        // Ensure no click event on green badges
+        readinessBadge.style.cursor = "default";
+        readinessBadge.title = "";
+        readinessBadge.onclick = null;
       } else {
         const details = [];
         if (unworkedCount > 0) details.push(`${unworkedCount} Unworked`);
@@ -3281,6 +3285,54 @@ async function renderAssignLeads() {
         readinessBadge.textContent = `🔴 Not Ready (${details.join(", ")})`;
         readinessBadge.style.backgroundColor = "rgba(244, 63, 94, 0.15)";
         readinessBadge.style.color = "#E11D48";
+
+        // 🚀 THE FIX: Make it clickable and spawn the copy modal
+        readinessBadge.style.cursor = "pointer";
+        readinessBadge.title = "Click to view and copy pending leads";
+        readinessBadge.onclick = () => {
+          let clipboardText = "";
+          if (unworkedNames.length > 0) {
+            clipboardText +=
+              "--- UNWORKED LEADS ---\n" + unworkedNames.join("\n") + "\n\n";
+          }
+          if (callbackNames.length > 0) {
+            clipboardText +=
+              "--- CALLBACKS DUE ---\n" + callbackNames.join("\n") + "\n\n";
+          }
+
+          const overlay = document.createElement("div");
+          overlay.style.cssText =
+            "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(13, 27, 62, 0.6); z-index:9999; display:flex; align-items:center; justify-content:center; backdrop-filter: blur(3px);";
+
+          const modal = document.createElement("div");
+          modal.style.cssText =
+            "background:#fff; padding:24px; border-radius:12px; width:400px; box-shadow:0 10px 25px rgba(0,0,0,0.2); display:flex; flex-direction:column; gap:16px; color:#0D1B3E;";
+
+          modal.innerHTML = `
+            <div>
+              <h3 style="margin:0 0 4px 0; font-size:18px; color:#0D1B3E;">Pending Leads for ${selectedAgent}</h3>
+              <p style="margin:0; font-size:13px; color:#64748b;">Copy and send these to the agent so they can search for them manually.</p>
+            </div>
+            <textarea id="copy-leads-text" class="form-input" style="height: 150px; resize: vertical; font-family: monospace; font-size: 13px;" readonly>${clipboardText.trim()}</textarea>
+            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:8px;">
+              <button id="close-copy-btn" class="btn-ghost" style="padding:8px 16px;">Close</button>
+              <button id="copy-names-btn" class="btn-primary" style="padding:8px 16px;">Copy to Clipboard</button>
+            </div>
+          `;
+
+          overlay.appendChild(modal);
+          document.body.appendChild(overlay);
+
+          document.getElementById("close-copy-btn").onclick = () =>
+            overlay.remove();
+          document.getElementById("copy-names-btn").onclick = () => {
+            const textEl = document.getElementById("copy-leads-text");
+            textEl.select();
+            document.execCommand("copy");
+            UI.showToast("Copied to clipboard!", "success");
+            overlay.remove();
+          };
+        };
       }
     });
   }
