@@ -911,6 +911,25 @@ async function recycleLeadAction(leadId, currentAgent, leadName) {
 }
 
 async function recycleAllLeads() {
+  if (!isAdmin()) return;
+
+  // ==========================================
+  // 🛑 THE DOUBLE-TAP DELTA SYNC
+  // ==========================================
+  setLoading(true);
+  try {
+    const lastSyncDate = localStorage.getItem("RaimakKineticLeadsLastSyncDate");
+    UI.showToast("Syncing leads...", "info");
+    State.leads = await Graph.getLeads(lastSyncDate, State.leads);
+  } catch (err) {
+    console.error("Delta Sync Error:", err);
+    setLoading(false);
+    UI.showToast("Cannot proceed: Live sync failed", "error");
+    return; // 💀 Hard Stop
+  }
+  setLoading(false); // Turn off the spinner so the confirm dialog isn't blocked
+
+  // Note: Filtering against the freshly synced State.leads
   const recycleLeads = State.leads.filter((l) => {
     return l.flags && l.flags.includes("needs_recycle");
   });
@@ -932,7 +951,7 @@ async function recycleAllLeads() {
 
   setLoading(true);
   try {
-    // 🚀 THE UPGRADE: Process in concurrent chunks of 10 to prevent SharePoint rate limits
+    // Process in concurrent chunks of 10 to prevent SharePoint rate limits
     const batchSize = 10;
 
     for (let i = 0; i < recycleLeads.length; i += batchSize) {
@@ -2131,7 +2150,7 @@ async function agentSaveAll(leadId) {
   const cbr = (document.getElementById("feed-cbr") || {}).value || "";
   const btn = (document.getElementById("feed-btn") || {}).value || "";
   const gac = (document.getElementById("feed-gac") || {}).value || "";
-  const email = (document.getElementById("feed-email") || {}).value || ""; 
+  const email = (document.getElementById("feed-email") || {}).value || "";
   const soldByEl = document.getElementById("feed-sold-by");
   const soldByName = soldByEl ? soldByEl.value : "";
   let rawCallbackDate =
@@ -2205,7 +2224,7 @@ async function agentSaveAll(leadId) {
   if (cbr) saveFields["CBR"] = cbr;
   if (btn) saveFields["BTN"] = btn;
   if (gac) saveFields["GAC"] = gac;
-  if (email) saveFields["Email"] = email; 
+  if (email) saveFields["Email"] = email;
 
   saveFields["CallbackDateTime"] = rawCallbackDate
     ? new Date(rawCallbackDate).toISOString()
@@ -2259,7 +2278,7 @@ async function agentSaveAll(leadId) {
     if (cbr) lead.cbr = cbr;
     if (btn) lead.btn = btn;
     if (gac) lead.gac = gac;
-    if (email) lead.email = email; 
+    if (email) lead.email = email;
     lead.callbackAt = rawCallbackDate || null;
 
     lead.lastContacted = todayDate;
@@ -2755,11 +2774,27 @@ function renderScrubCard(lead) {
 // ============================================================
 //  ASSIGN LEADS (Admin only)
 // ============================================================
-function renderAssignLeads() {
+async function renderAssignLeads() {
   if (!isAdmin()) {
     navigate("myleads");
     return;
   }
+
+  // ==========================================
+  // 🛑 THE DOUBLE-TAP DELTA SYNC
+  // ==========================================
+  setLoading(true);
+  try {
+    const lastSyncDate = localStorage.getItem("RaimakKineticLeadsLastSyncDate");
+    UI.showToast("Syncing leads...", "info");
+    State.leads = await Graph.getLeads(lastSyncDate, State.leads);
+  } catch (err) {
+    console.error("Delta Sync Error:", err);
+    setLoading(false);
+    UI.showToast("Cannot proceed: Live sync failed", "error");
+    return; // 💀 Hard Stop
+  }
+  setLoading(false);
 
   const { leads, contractors } = State;
   const unassigned = leads.filter(function (l) {
@@ -3081,7 +3116,6 @@ function renderAssignLeads() {
               ? `<span title="${escHtml(lead.previousAgents)}" style="font-size:10px; background:#f1f5f9; color:#64748b; padding:2px 6px; border-radius:4px; margin-left:8px; font-weight:600; cursor:help;">↺ ${prevArray.length} prev agents</span>`
               : "";
 
-          // 🚀 THE REGEX FIX: Clean class names for badges with spaces!
           const safeTypeClass = (lead.leadType || "")
             .toLowerCase()
             .replace(/\s+/g, "-")
@@ -3210,7 +3244,6 @@ function renderAssignLeads() {
             );
             isAwake = localHour >= 8 && localHour < 20;
           } catch (err) {
-            console.warn("Timezone calculation failed for tz:", tz);
             isAwake = true;
           }
         }
@@ -3360,82 +3393,102 @@ async function bulkAssignToSelectedAgent() {
     return;
   }
 
-  const unassigned = State.leads.filter(function (l) {
-    const isValidLead = l && l.id && (l.name || l.phone || l.BTN || l.btn);
-    const isAvailable =
-      !l.assignedTo && !Config.terminalStatuses.includes(l.status);
-    return isValidLead && isAvailable;
-  });
-
-  const validLeads = unassigned.filter(function (l) {
-    const typeMatch =
-      selectedType === "all" ||
-      (l.leadType && l.leadType.toLowerCase() === selectedType.toLowerCase());
-    const stateMatch =
-      selectedState === "all" ||
-      (l.state && l.state.toUpperCase() === selectedState.toUpperCase());
-    const batchMatch = selectedBatch === "all" || l._batchId === selectedBatch;
-
-    const hasPrevAgent = !!(l.previousAgents && l.previousAgents.trim() !== "");
-    let passesWorkFilter = true;
-    if (requireUnworked && hasPrevAgent) passesWorkFilter = false;
-    if (requireWorked && !hasPrevAgent) passesWorkFilter = false;
-
-    const prevAgents = (l.previousAgents || "").toLowerCase();
-    const agentMatch = !prevAgents.includes(agentName.toLowerCase());
-
-    return (
-      typeMatch && stateMatch && batchMatch && passesWorkFilter && agentMatch
-    );
-  });
-
-  validLeads.sort((a, b) => {
-    const countA = a.previousAgents
-      ? a.previousAgents.split(",").filter((x) => x.trim()).length
-      : 0;
-    const countB = b.previousAgents
-      ? b.previousAgents.split(",").filter((x) => x.trim()).length
-      : 0;
-
-    if (selectedSort === "least_worked") {
-      return (
-        countA - countB ||
-        new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
-      );
-    } else if (selectedSort === "most_worked") {
-      return (
-        countB - countA ||
-        new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
-      );
-    } else {
-      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
-    }
-  });
-
-  const stateLabel = selectedState === "all" ? "" : `${selectedState} `;
-  const typeLabel = selectedType === "all" ? "leads" : `${selectedType} leads`;
-  const combinedLabel = `${stateLabel}${typeLabel}`.trim();
-
-  if (validLeads.length === 0) {
-    UI.showToast(
-      `${agentName} has no eligible ${combinedLabel} left to work with these filters!`,
-      "warning",
-    );
-    return;
-  }
-
-  if (qty > validLeads.length) {
-    UI.showToast(
-      `Only ${validLeads.length} eligible ${combinedLabel} available for ${agentName}.`,
-      "warning",
-    );
-    return;
-  }
-
-  const leadsToAssign = validLeads.slice(0, qty);
-
+  // ==========================================
+  // 🛑 THE DOUBLE-TAP DELTA SYNC
+  // ==========================================
   setLoading(true);
   try {
+    const lastSyncDate = localStorage.getItem("RaimakKineticLeadsLastSyncDate");
+    State.leads = await Graph.getLeads(lastSyncDate, State.leads);
+  } catch (err) {
+    console.error("Delta Sync Error:", err);
+    setLoading(false);
+    UI.showToast("Cannot proceed: Live sync failed", "error");
+    return; // 💀 Hard Stop
+  }
+
+  try {
+    // Note: Re-calculating unassigned now that State.leads is freshly synced
+    const unassigned = State.leads.filter(function (l) {
+      const isValidLead = l && l.id && (l.name || l.phone || l.BTN || l.btn);
+      const isAvailable =
+        !l.assignedTo && !Config.terminalStatuses.includes(l.status);
+      return isValidLead && isAvailable;
+    });
+
+    const validLeads = unassigned.filter(function (l) {
+      const typeMatch =
+        selectedType === "all" ||
+        (l.leadType && l.leadType.toLowerCase() === selectedType.toLowerCase());
+      const stateMatch =
+        selectedState === "all" ||
+        (l.state && l.state.toUpperCase() === selectedState.toUpperCase());
+      const batchMatch =
+        selectedBatch === "all" || l._batchId === selectedBatch;
+
+      const hasPrevAgent = !!(
+        l.previousAgents && l.previousAgents.trim() !== ""
+      );
+      let passesWorkFilter = true;
+      if (requireUnworked && hasPrevAgent) passesWorkFilter = false;
+      if (requireWorked && !hasPrevAgent) passesWorkFilter = false;
+
+      const prevAgents = (l.previousAgents || "").toLowerCase();
+      const agentMatch = !prevAgents.includes(agentName.toLowerCase());
+
+      return (
+        typeMatch && stateMatch && batchMatch && passesWorkFilter && agentMatch
+      );
+    });
+
+    validLeads.sort((a, b) => {
+      const countA = a.previousAgents
+        ? a.previousAgents.split(",").filter((x) => x.trim()).length
+        : 0;
+      const countB = b.previousAgents
+        ? b.previousAgents.split(",").filter((x) => x.trim()).length
+        : 0;
+
+      if (selectedSort === "least_worked") {
+        return (
+          countA - countB ||
+          new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+        );
+      } else if (selectedSort === "most_worked") {
+        return (
+          countB - countA ||
+          new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+        );
+      } else {
+        return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+      }
+    });
+
+    const stateLabel = selectedState === "all" ? "" : `${selectedState} `;
+    const typeLabel =
+      selectedType === "all" ? "leads" : `${selectedType} leads`;
+    const combinedLabel = `${stateLabel}${typeLabel}`.trim();
+
+    if (validLeads.length === 0) {
+      setLoading(false);
+      UI.showToast(
+        `${agentName} has no eligible ${combinedLabel} left to work with these filters!`,
+        "warning",
+      );
+      return;
+    }
+
+    if (qty > validLeads.length) {
+      setLoading(false);
+      UI.showToast(
+        `Only ${validLeads.length} eligible ${combinedLabel} available for ${agentName}.`,
+        "warning",
+      );
+      return;
+    }
+
+    const leadsToAssign = validLeads.slice(0, qty);
+
     await Promise.all(
       leadsToAssign.map(async (lead) => {
         await Graph.updateLead(lead.id, { Agent_x0020_Assigned: agentName });
