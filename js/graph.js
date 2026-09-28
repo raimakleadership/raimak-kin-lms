@@ -543,19 +543,25 @@ const Graph = (() => {
     // 🚀 FIX: Prevent customers from being named by their ID number
     const name = (first + " " + last).trim() || f.LeadName || "";
 
+    // 🚀 THE PRODUCT EXTRACTOR: Catch strings, arrays, and weird internal naming
+    let rawProducts = f.CurrentProducts || "";
+    if (Array.isArray(rawProducts)) rawProducts = rawProducts[0] || "";
+
+    // 🪓 THE HTML ASSASSIN: Strip out SharePoint's weird Rich Text <div> wrappers
+    rawProducts = String(rawProducts)
+      .replace(/<[^>]+>/g, "")
+      .trim();
+
     return {
-      id: item.id, // The essential SharePoint Row ID
-      kineticLeadId: f.Title || f.LeadID || "", // 🚀 THE FIX: Catches the stubborn SharePoint 'Title' column
+      id: item.id,
+      kineticLeadId: f.Title || f.LeadID || "",
       name: name,
       firstName: first,
       lastName: last,
       email: f.Email || f.EmailAddress || "",
-
-      // 🚀 The new Kinetic Identifiers!
       cbr: f.CBR || "",
       btn: f.BTN || "",
       gac: f.GAC || "",
-
       status: f.Status || "New",
       assignedTo: f.Agent_x0020_Assigned || f.AgentAssigned || f.Agent || "",
       notes: f.Notes || "",
@@ -569,11 +575,10 @@ const Graph = (() => {
       modified: item.lastModifiedDateTime || null,
       leadType: f.Lead_x0020_Type || f.Type || "",
       currentMRC: f.MonthlyRecurringCharge_x0028_MRC || f.CurrentMRC || "",
-      currentProducts: f.CurrentProducts || "",
+      currentProducts: rawProducts, // 🚀 Now guaranteed to be pure, tag-free text!
       previousAgents: f.PreviousAgents || "",
     };
   }
-
   // ============================================================
   //  CONTRACTORS / AGENTS
   // ============================================================
@@ -1278,10 +1283,14 @@ const Graph = (() => {
       if (lead.lastContacted) {
         const daysSince = (now - new Date(lead.lastContacted)) / 86400000;
 
-        // 🚀 TWEAK: Only flag 3rd Contacts for recycle if they are actively assigned AND have no callback
+        // 🚀 TWEAK: Handle "3rd Contact" (Standard) and "Not Interested" (7-Day)
+        const is3rdContactReady =
+          lead.status === "3rd Contact" && daysSince >= coolOffDays;
+        const isNotInterestedReady =
+          lead.status === "Not Interested" && daysSince >= 7;
+
         if (
-          lead.status === "3rd Contact" &&
-          daysSince >= coolOffDays &&
+          (is3rdContactReady || isNotInterestedReady) &&
           isAssigned &&
           !hasCallback
         ) {
@@ -1296,8 +1305,9 @@ const Graph = (() => {
         ref &&
         !Config.terminalStatuses.includes(lead.status) &&
         lead.status !== "3rd Contact" &&
+        lead.status !== "Not Interested" && // 🛡️ SHIELD ACTIVE: Protects from general recycle sweep
         isAssigned &&
-        !hasCallback // 🛡️ SHIELD ACTIVE: Protect scheduled callbacks from the general recycle timer
+        !hasCallback
       ) {
         const daysSince = (now - new Date(ref)) / 86400000;
         if (daysSince > recycleAfterDays) flags.push("needs_recycle");

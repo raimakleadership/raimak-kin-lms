@@ -1501,6 +1501,34 @@ function renderMyLeads() {
     );
   });
 
+  // 🚀 THE NEW COOL-OFF MATH
+  const nowMs = Date.now();
+  const fourHoursMs = 4 * 60 * 60 * 1000;
+  let unlockingSoonCount = 0;
+
+  rawMyLeads.forEach((lead) => {
+    // Only check leads actively sitting in cool-off
+    if (!Graph.isInCoolOff(lead) || !lead.lastContacted) return;
+
+    const currentStatus = (lead.status || "").trim().toLowerCase();
+    const coolOffDays =
+      currentStatus === "not interested" ? 7 : Config.rules.coolOffDays;
+
+    // Exact ms they thaw
+    const unlockTime =
+      new Date(lead.lastContacted).getTime() + coolOffDays * 86400000;
+
+    // Is it happening in the next 4 hours?
+    if (unlockTime > nowMs && unlockTime <= nowMs + fourHoursMs) {
+      unlockingSoonCount++;
+    }
+  });
+
+  const unlockingText =
+    unlockingSoonCount === 1
+      ? "1 unlocking in the next 4 hrs"
+      : `${unlockingSoonCount} unlocking in the next 4 hrs`;
+
   console.log("--- QUEUE DIAGNOSTIC ---");
   console.log(
     `Total leads technically assigned to this agent in RAM: ${rawMyLeads.length}`,
@@ -1536,15 +1564,17 @@ function renderMyLeads() {
     _currentFeedIndex = 0;
     if (window._clockTimer) clearInterval(window._clockTimer);
 
-    if (subtitleEl) subtitleEl.textContent = `// 0 remaining`;
+    // 🚀 NEW SMART SUBTITLE (Empty Queue)
+    if (subtitleEl)
+      subtitleEl.textContent = `// 0 remaining — ${unlockingText}`;
 
     if (feedWrap) {
       // 🎨 Dynamic HTML: Inject the banner ONLY if there are sleeping leads
       const sleepingBannerHTML =
         hiddenByTimezone > 0
           ? `<div style="background: var(--blue-light, #e0e7ff); color: var(--blue-dark, #3730a3); padding: 10px 16px; border-radius: 8px; display: inline-block; margin-bottom: 24px; font-size: 14px; font-weight: 600;">
-             🌙 ${hiddenByTimezone} lead${hiddenByTimezone !== 1 ? "s" : ""} resting outside 8 AM - 8 PM dialing hours.
-           </div><br>`
+              🌙 ${hiddenByTimezone} lead${hiddenByTimezone !== 1 ? "s" : ""} resting outside 8 AM - 8 PM dialing hours.
+            </div><br>`
           : ``;
 
       feedWrap.innerHTML = `
@@ -1566,8 +1596,10 @@ function renderMyLeads() {
   // ==========================================
   //  THE RENDER LOGIC (If there are leads)
   // ==========================================
+
+  // 🚀 NEW SMART SUBTITLE (Active Queue)
   if (subtitleEl) {
-    subtitleEl.textContent = `// ${myLeads.length} remaining · lead ${_currentFeedIndex + 1} of ${myLeads.length}`;
+    subtitleEl.textContent = `// ${myLeads.length} remaining — ${unlockingText}`;
   }
 
   if (feedWrap) {
@@ -1776,7 +1808,6 @@ function renderLeadFeedCard(myLeads) {
   // 🚀 KINETIC META ROW: Sales Rabbit ID + Address
   let metaHtml = "";
 
-  // 🚀 THE CACHE FIX: Checks every possible name the old LocalDB might have saved it as
   const salesRabbitId =
     lead.kineticLeadId ||
     lead.Title ||
@@ -1887,12 +1918,23 @@ function renderLeadFeedCard(myLeads) {
     });
   }
 
+  // 🚀 THE FIX: Bulletproof string comparison for products
   const productsSelect = clone.getElementById("feed-products");
   Config.currentProducts.forEach((p) => {
     const option = document.createElement("option");
     option.value = p;
     option.textContent = p;
-    if (lead.currentProducts === p) option.selected = true;
+
+    const safeLeadProduct = (lead.currentProducts || "")
+      .toString()
+      .trim()
+      .toLowerCase();
+    const safeConfigProduct = p.trim().toLowerCase();
+
+    if (safeLeadProduct === safeConfigProduct) {
+      option.selected = true;
+    }
+
     productsSelect.appendChild(option);
   });
 
@@ -2137,15 +2179,24 @@ async function agentSaveAll(leadId) {
 
   // 1. Grab UI Values
   const mrc = (document.getElementById("feed-mrc") || {}).value || "";
-  const productsSelectEl = document.getElementById("feed-products");
-  let products = "";
-  if (
-    productsSelectEl &&
-    productsSelectEl.options.length > 0 &&
-    productsSelectEl.selectedIndex !== -1
-  ) {
-    products = productsSelectEl.options[productsSelectEl.selectedIndex].value;
+
+  // 🚀 THE FIX: Bulletproof Dropdown Extractor
+  const productsEl = document.getElementById("feed-products");
+  let products = undefined; // undefined = element isn't on screen
+
+  if (productsEl) {
+    if (productsEl.selectedIndex > 0) {
+      // Safely grab the value, fallback to the text if value attribute is missing
+      const opt = productsEl.options[productsEl.selectedIndex];
+      products = opt.value || opt.text;
+    } else if (productsEl.selectedIndex === 0) {
+      // They are on the default `<option value="">Select products...</option>`
+      products = "";
+    } else {
+      products = productsEl.value;
+    }
   }
+
   const newNote = (document.getElementById("feed-notes") || {}).value || "";
   const cbr = (document.getElementById("feed-cbr") || {}).value || "";
   const btn = (document.getElementById("feed-btn") || {}).value || "";
@@ -2183,8 +2234,6 @@ async function agentSaveAll(leadId) {
     );
   }
 
-  // 🚀 STRICT VALIDATION BLOCK REMOVED HERE (Agents are no longer trapped by bad scrub data)
-
   // Note Stamping
   let notes = lead.notes || "";
   if (newNote.trim()) {
@@ -2220,7 +2269,12 @@ async function agentSaveAll(leadId) {
   };
 
   if (mrc) saveFields["MonthlyRecurringCharge_x0028_MRC"] = mrc;
-  if (products) saveFields["CurrentProducts"] = products;
+
+  // 🚀 THE FIX: SharePoint requires 'null' to clear a field, it hates empty strings ("")
+  if (products !== undefined) {
+    saveFields["CurrentProducts"] = products !== "" ? products : null;
+  }
+
   if (cbr) saveFields["CBR"] = cbr;
   if (btn) saveFields["BTN"] = btn;
   if (gac) saveFields["GAC"] = gac;
@@ -2274,7 +2328,7 @@ async function agentSaveAll(leadId) {
     lead.status = newStatus;
     lead.notes = notes;
     if (mrc) lead.currentMRC = mrc;
-    if (products) lead.currentProducts = products;
+    if (products !== undefined) lead.currentProducts = products; // 🚀 THE RAM FIX
     if (cbr) lead.cbr = cbr;
     if (btn) lead.btn = btn;
     if (gac) lead.gac = gac;
@@ -5020,22 +5074,18 @@ async function uploadLeadsToSharePoint(csvData, leadType) {
   // 🛡️ 1. THE IN-MEMORY BOUNCER (Deduplication)
   // ==========================================
 
-  // 🚀 KINETIC UPGRADE: We now deduplicate using the LeadID or Global Account Number!
-  const generateKey = (leadId, gac, address) => {
-    const clean = (str) => (str || "").toLowerCase().trim();
+  // Helper function to violently sanitize strings for perfect matching
+  const cleanAddr = (str) =>
+    (str || "").toLowerCase().replace(/[^a-z0-9]/g, ""); // Strips all spaces, commas, periods
 
-    // If we have a LeadID or GAC, that's our ironclad identifier
-    if (leadId) return `LID_${clean(leadId)}`;
-    if (gac) return `GAC_${clean(gac)}`;
-
-    // Fallback just in case a row is missing both
-    return `ADDR_${clean(address)}`;
+  // 🚀 KINETIC UPGRADE: Deduplicate using ONLY the Address
+  const generateKey = (fullAddress) => {
+    return `ADDR_${cleanAddr(fullAddress)}`;
   };
 
   const existingKeys = new Set();
   (State.leads || []).forEach((lead) => {
-    // Check against the Kinetic identifiers mapped in graph.js
-    const key = generateKey(lead.kineticLeadId, lead.gac, lead.address);
+    const key = generateKey(lead.address);
     existingKeys.add(key);
   });
 
@@ -5043,15 +5093,16 @@ async function uploadLeadsToSharePoint(csvData, leadType) {
   let duplicateCount = 0;
 
   csvData.forEach((row) => {
-    const leadId = getCSVField(row, ["LeadID", "CMS ID"]);
-    const gac = getCSVField(row, ["Global Account Number", "GAC"]);
+    // Build the exact same full address that mapCSVRowToSharePointFields builds
     const address1 = getCSVField(row, [
       "Address 1",
       "Address1",
       "StreetAddress",
     ]);
+    const address2 = getCSVField(row, ["Address 2", "Address2", "Apt"]);
+    const fullAddress = address2 ? `${address1} ${address2}`.trim() : address1;
 
-    const key = generateKey(leadId, gac, address1);
+    const key = generateKey(fullAddress);
 
     if (existingKeys.has(key)) {
       duplicateCount++;
@@ -5112,6 +5163,7 @@ async function uploadLeadsToSharePoint(csvData, leadType) {
     }
 
     const batchRequests = chunk.map((row, index) => {
+      // Passes the row down to your unchanged mapper function
       const mappedFields = mapCSVRowToSharePointFields(row, leadType);
 
       return {
@@ -7444,13 +7496,19 @@ function renderLeadModal(lead) {
       lead.lastContacted.split("T")[0];
   }
 
+  // 🚀 THE MATCH FIX: Bulletproof string comparisons for dropdowns
+  const safeMatch = (a, b) =>
+    (a || "").toString().trim().toLowerCase() ===
+    (b || "").toString().trim().toLowerCase();
+
   // 4. Populate Dropdowns dynamically
   const leadTypeSelect = clone.getElementById("f-leadtype");
+  leadTypeSelect.innerHTML = `<option value="">Select type...</option>`;
   Config.leadTypes.forEach((t) => {
     const opt = document.createElement("option");
     opt.value = t;
     opt.textContent = t;
-    if (lead && lead.leadType === t) opt.selected = true;
+    if (safeMatch(lead?.leadType, t)) opt.selected = true;
     leadTypeSelect.appendChild(opt);
   });
 
@@ -7459,25 +7517,27 @@ function renderLeadModal(lead) {
     const opt = document.createElement("option");
     opt.value = s;
     opt.textContent = s;
-    if ((lead?.status || "New") === s) opt.selected = true;
+    if (safeMatch(lead?.status || "New", s)) opt.selected = true;
     statusSelect.appendChild(opt);
   });
 
   const assignedSelect = clone.getElementById("f-assigned");
+  assignedSelect.innerHTML = `<option value="">Unassigned</option>`;
   contractors.forEach((c) => {
     const opt = document.createElement("option");
     opt.value = c;
     opt.textContent = c;
-    if (lead && lead.assignedTo === c) opt.selected = true;
+    if (safeMatch(lead?.assignedTo, c)) opt.selected = true;
     assignedSelect.appendChild(opt);
   });
 
   const productsSelect = clone.getElementById("f-products");
+  productsSelect.innerHTML = `<option value="">Select products...</option>`;
   Config.currentProducts.forEach((p) => {
     const opt = document.createElement("option");
     opt.value = p;
     opt.textContent = p;
-    if (lead && lead.currentProducts === p) opt.selected = true;
+    if (safeMatch(lead?.currentProducts, p)) opt.selected = true;
     productsSelect.appendChild(opt);
   });
 
@@ -7560,31 +7620,33 @@ async function submitEditLead() {
   }
 
   try {
-    // 1. Grab all values from the UI
+    // 🚀 THE NULL FIX: Sanitizes empty strings into valid nulls for the Graph API
+    const getVal = (elId) => {
+      const el = document.getElementById(elId);
+      return el ? el.value.trim() : "";
+    };
+    const getNullIfEmpty = (elId) => {
+      const val = getVal(elId);
+      return val === "" ? null : val;
+    };
+
+    // 1. Grab all values from the UI safely
     const payload = {
-      FirstName: (document.getElementById("f-firstname").value || "").trim(),
-      LastName: (document.getElementById("f-lastname").value || "").trim(),
-      Email: (document.getElementById("f-email").value || "").trim(), // 🚀 New Email Field
-      BTN: (document.getElementById("f-btn").value || "").trim(),
-      CBR: (document.getElementById("f-cbr").value || "").trim(),
-      GAC: (document.getElementById("f-gac").value || "").trim(), // 🚀 New GAC Field
-      WorkAddress: (document.getElementById("f-address").value || "").trim(),
-      WorkCity: (document.getElementById("f-city").value || "").trim(),
-      State: (document.getElementById("f-state").value || "").trim(),
-      Zip: (document.getElementById("f-zip").value || "").trim(),
-      Lead_x0020_Type: (
-        document.getElementById("f-leadtype").value || ""
-      ).trim(),
-      Status: (document.getElementById("f-status").value || "New").trim(),
-      Agent_x0020_Assigned: (
-        document.getElementById("f-assigned").value || ""
-      ).trim(),
-      MonthlyRecurringCharge_x0028_MRC: (
-        document.getElementById("f-mrc").value || ""
-      ).trim(),
-      CurrentProducts: (
-        document.getElementById("f-products").value || ""
-      ).trim(),
+      FirstName: getVal("f-firstname"),
+      LastName: getVal("f-lastname"),
+      Email: getVal("f-email"), // 🚀 New Email Field
+      BTN: getVal("f-btn"),
+      CBR: getVal("f-cbr"),
+      GAC: getVal("f-gac"), // 🚀 New GAC Field
+      WorkAddress: getVal("f-address"),
+      WorkCity: getVal("f-city"),
+      State: getVal("f-state"),
+      Zip: getVal("f-zip"),
+      Lead_x0020_Type: getNullIfEmpty("f-leadtype"),
+      Status: getVal("f-status") || "New",
+      Agent_x0020_Assigned: getNullIfEmpty("f-assigned"),
+      MonthlyRecurringCharge_x0028_MRC: getNullIfEmpty("f-mrc"),
+      CurrentProducts: getNullIfEmpty("f-products"),
     };
 
     const dateVal = document.getElementById("f-lastcontacted").value;
@@ -7614,24 +7676,38 @@ async function submitEditLead() {
     // 3. Send update to SharePoint
     await Graph.updateLead(id, payload);
 
+    // 🛡️ BACKUP ASSIGNMENT TRIGGER: If the LMS requires the specialized Graph.assignAgent function, fire it here.
+    const newAgent = payload.Agent_x0020_Assigned || "";
+    const oldAgent = lead.assignedTo || "";
+    if (newAgent !== oldAgent && typeof Graph.assignAgent === "function") {
+      try {
+        await Graph.assignAgent(id, newAgent);
+      } catch (assignErr) {
+        console.warn(
+          "Secondary assignAgent trigger failed (non-fatal):",
+          assignErr,
+        );
+      }
+    }
+
     // 4. Update Local RAM so the UI refreshes perfectly without an API recall
-    lead.firstName = payload.FirstName;
-    lead.lastName = payload.LastName;
+    lead.firstName = payload.FirstName || "";
+    lead.lastName = payload.LastName || "";
     lead.name =
       (payload.FirstName + " " + payload.LastName).trim() || lead.name;
-    lead.email = payload.Email; // 🚀 Save Email to RAM
-    lead.btn = payload.BTN;
-    lead.cbr = payload.CBR;
-    lead.gac = payload.GAC; // 🚀 Save GAC to RAM
-    lead.address = payload.WorkAddress;
-    lead.city = payload.WorkCity;
-    lead.state = payload.State;
-    lead.zip = payload.Zip;
-    lead.leadType = payload.Lead_x0020_Type;
+    lead.email = payload.Email || "";
+    lead.btn = payload.BTN || "";
+    lead.cbr = payload.CBR || "";
+    lead.gac = payload.GAC || "";
+    lead.address = payload.WorkAddress || "";
+    lead.city = payload.WorkCity || "";
+    lead.state = payload.State || "";
+    lead.zip = payload.Zip || "";
+    lead.leadType = payload.Lead_x0020_Type || "";
     lead.status = payload.Status;
-    lead.assignedTo = payload.Agent_x0020_Assigned;
-    lead.currentMRC = payload.MonthlyRecurringCharge_x0028_MRC;
-    lead.currentProducts = payload.CurrentProducts;
+    lead.assignedTo = payload.Agent_x0020_Assigned || ""; // Fallback to "" so UI doesn't render literal 'null'
+    lead.currentMRC = payload.MonthlyRecurringCharge_x0028_MRC || "";
+    lead.currentProducts = payload.CurrentProducts || "";
     if (newNote) lead.notes = finalNotes;
     if (payload.LastTouchedOn) lead.lastContacted = payload.LastTouchedOn;
 
@@ -7639,23 +7715,35 @@ async function submitEditLead() {
     closeModal();
 
     // 5. Redraw whatever screen the user is currently looking at
-    if (State.currentView === "admin" && typeof renderLeads === "function")
+    const view = (State.currentView || "").toLowerCase().replace(/[^a-z]/g, "");
+
+    if (
+      (view === "admin" || view === "leads") &&
+      typeof renderLeads === "function"
+    ) {
       renderLeads();
-    else if (
-      State.currentView === "assign" &&
-      typeof renderAssignLeads === "function"
-    )
+    } else if (view === "assign" && typeof renderAssignLeads === "function") {
       renderAssignLeads();
-    else if (
-      State.currentView === "myleads" &&
-      typeof renderMyLeads === "function"
-    )
+    } else if (view === "myleads" && typeof renderMyLeads === "function") {
       renderMyLeads();
-    else if (
-      State.currentView === "scrubhub" &&
-      typeof renderScrubHub === "function"
-    )
+    } else if (view === "scrubhub" && typeof renderScrubHub === "function") {
       renderScrubHub();
+    } else {
+      // 🛡️ FALLBACK: If State.currentView is empty/broken, guess based on visible HTML elements
+      if (
+        document.getElementById("lead-feed-wrap") &&
+        typeof renderMyLeads === "function"
+      ) {
+        renderMyLeads();
+      } else if (
+        document.getElementById("assign-wrapper") &&
+        typeof renderAssignLeads === "function"
+      ) {
+        renderAssignLeads();
+      } else if (typeof renderLeads === "function") {
+        renderLeads();
+      }
+    }
   } catch (error) {
     console.error("Edit Lead Error:", error);
     UI.showToast("Failed to edit lead: " + error.message, "error");
