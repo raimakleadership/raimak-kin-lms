@@ -141,6 +141,7 @@ const Config = {
     "a.gonzalez@raimak.com",
     "i.turrubiartez@raimak.com",
     "t.hughes@raimak.com",
+    "a.edminster@raimak.com",
   ],
 
   scopes: ["Sites.ReadWrite.All", "User.Read"],
