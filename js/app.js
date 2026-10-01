@@ -1950,6 +1950,10 @@ function renderLeadFeedCard(myLeads) {
   const statusContainer = clone.getElementById("feed-status-buttons");
   const hiddenStatuses = ["New", "TD Non-Reg", "D2D Lead"];
 
+  // 🚀 NEW: Dynamic rendering of status buttons to attach toggle events securely
+  const liveReasonBox = clone.getElementById("feed-bad-reason-container");
+  const liveReasonSelect = clone.getElementById("feed-bad-reason-select");
+
   Config.leadStatuses
     .filter((s) => !hiddenStatuses.includes(s))
     .forEach((s) => {
@@ -1960,7 +1964,28 @@ function renderLeadFeedCard(myLeads) {
           .toLowerCase()
           .replace(/\s+/g, "-")
           .replace(/[^a-z0-9-]/g, "");
-      statusContainer.innerHTML += `<button class="status-btn ${cls}" id="sbtn-${s.replace(/\s+/g, "-")}" onclick="stageStatus('${lead.id}','${s}')">${s}${isTDM}</button>`;
+
+      const btn = document.createElement("button");
+      btn.className = `status-btn ${cls}`;
+      btn.id = `sbtn-${s.replace(/\s+/g, "-")}`;
+      btn.innerHTML = `${s}${isTDM}`;
+
+      btn.onclick = () => {
+        // 1. Stage the status normally
+        if (typeof stageStatus === "function") stageStatus(lead.id, s);
+
+        // 2. Toggle the specific reason box inside this exact card
+        if (liveReasonBox) {
+          if (s === "Bad Lead") {
+            liveReasonBox.style.display = "block";
+          } else {
+            liveReasonBox.style.display = "none";
+            if (liveReasonSelect) liveReasonSelect.value = ""; // Clear if they change mind
+          }
+        }
+      };
+
+      statusContainer.appendChild(btn);
     });
 
   clone.getElementById("feed-today-date").textContent =
@@ -2182,15 +2207,13 @@ async function agentSaveAll(leadId) {
 
   // 🚀 THE FIX: Bulletproof Dropdown Extractor
   const productsEl = document.getElementById("feed-products");
-  let products = undefined; // undefined = element isn't on screen
+  let products = undefined;
 
   if (productsEl) {
     if (productsEl.selectedIndex > 0) {
-      // Safely grab the value, fallback to the text if value attribute is missing
       const opt = productsEl.options[productsEl.selectedIndex];
       products = opt.value || opt.text;
     } else if (productsEl.selectedIndex === 0) {
-      // They are on the default `<option value="">Select products...</option>`
       products = "";
     } else {
       products = productsEl.value;
@@ -2214,7 +2237,23 @@ async function agentSaveAll(leadId) {
     return UI.showToast("Please update the lead status from 'New'.", "warning");
   }
 
-  // 📝 REQUIRED NOTE CHECK: Blocks saving if the textarea is empty or just spaces
+  // 🚀 NEW: BAD LEAD STATUS SWAP
+  const badLeadReasonEl = document.getElementById("feed-bad-reason-select");
+  const badLeadReason = badLeadReasonEl ? badLeadReasonEl.value : "";
+
+  let finalStatus = newStatus; // This will be the actual status sent to SharePoint
+
+  if (newStatus === "Bad Lead") {
+    if (!badLeadReason) {
+      return UI.showToast(
+        "Please select a Failure Reason for the Bad Lead.",
+        "warning",
+      );
+    }
+    finalStatus = badLeadReason; // 🚀 SWAP! The reason becomes the actual status
+  }
+
+  // 📝 REQUIRED NOTE CHECK
   if (!newNote.trim()) {
     const notesEl = document.getElementById("feed-notes");
     if (notesEl) {
@@ -2234,9 +2273,16 @@ async function agentSaveAll(leadId) {
     );
   }
 
-  // Note Stamping
+  // 🚀 NEW: Note Stamping & Reason Injection
+  let finalNoteToStamp = newNote.trim();
+  if (newStatus === "Bad Lead") {
+    finalNoteToStamp = finalNoteToStamp
+      ? `Reason: ${badLeadReason} - ${finalNoteToStamp}`
+      : `Marked as Bad Lead: ${badLeadReason}`;
+  }
+
   let notes = lead.notes || "";
-  if (newNote.trim()) {
+  if (finalNoteToStamp) {
     const today = new Date();
     const dateStamp =
       (today.getMonth() + 1).toString().padStart(2, "0") +
@@ -2245,7 +2291,11 @@ async function agentSaveAll(leadId) {
       "/" +
       String(today.getFullYear()).slice(-2);
     const agentTag = user && user.name ? " - " + user.name : "";
-    const stamped = `[${dateStamp}${agentTag}] ${newStatus} - ${newNote.trim()}`;
+
+    // Tag it as "Scrubbed" in the notes to keep it looking clean
+    const actionTag = newStatus === "Bad Lead" ? "Scrubbed" : finalStatus;
+    const stamped = `[${dateStamp}${agentTag}] ${actionTag} - ${finalNoteToStamp}`;
+
     notes = notes ? stamped + "\n" + notes : stamped;
   }
 
@@ -2257,20 +2307,26 @@ async function agentSaveAll(leadId) {
     ? soldByContractor.email || soldByName
     : (user && user.email) || "";
   const activityEmail =
-    newStatus === Config.soldStatus ? soldByEmail : (user && user.email) || "";
+    finalStatus === Config.soldStatus
+      ? soldByEmail
+      : (user && user.email) || "";
 
   // 2. Setup Payload for SharePoint
   const todayDate = new Date().toISOString();
 
   const saveFields = {
-    Status: newStatus,
+    Status: finalStatus, // 🚀 Saves the swapped status
     LastTouchedOn: todayDate,
     Notes: notes,
   };
 
+  // 🚀 THE LEAD TYPE FIX: Change the overarching category to Bad Lead
+  if (newStatus === "Bad Lead") {
+    saveFields["Lead_x0020_Type"] = "Bad Lead";
+  }
+
   if (mrc) saveFields["MonthlyRecurringCharge_x0028_MRC"] = mrc;
 
-  // 🚀 THE FIX: SharePoint requires 'null' to clear a field, it hates empty strings ("")
   if (products !== undefined) {
     saveFields["CurrentProducts"] = products !== "" ? products : null;
   }
@@ -2282,11 +2338,11 @@ async function agentSaveAll(leadId) {
 
   saveFields["CallbackDateTime"] = rawCallbackDate
     ? new Date(rawCallbackDate).toISOString()
-    : newStatus === "Pending Order"
+    : finalStatus === "Pending Order"
       ? lead.callbackAt
       : null;
 
-  if (newStatus === "TDM") {
+  if (finalStatus === "TDM") {
     saveFields["Agent_x0020_Assigned"] = null;
   }
 
@@ -2295,11 +2351,11 @@ async function agentSaveAll(leadId) {
     const logEntry = {
       LeadID: leadId,
       Title: lead.name || "Unknown Lead",
-      ActionType: "Status: " + newStatus,
+      ActionType: "Status: " + finalStatus,
       AgentEmail: activityEmail,
       Notes:
         notes +
-        (newStatus === Config.soldStatus && soldByName
+        (finalStatus === Config.soldStatus && soldByName
           ? ` [Sold by ${soldByName}]`
           : ""),
     };
@@ -2319,16 +2375,17 @@ async function agentSaveAll(leadId) {
       leadName: lead.name || "Unknown Lead",
       agent: activityEmail,
       agentEmail: activityEmail,
-      action: "Status: " + newStatus,
+      action: "Status: " + finalStatus,
       notes: notes,
       timestamp: new Date().toISOString(),
     });
 
     // 3. Update RAM (Optimistic UI)
-    lead.status = newStatus;
+    lead.status = finalStatus; // 🚀 Updates the UI with the swapped status
+    if (newStatus === "Bad Lead") lead.leadType = "Bad Lead"; // 🚀 Update local lead type too
     lead.notes = notes;
     if (mrc) lead.currentMRC = mrc;
-    if (products !== undefined) lead.currentProducts = products; // 🚀 THE RAM FIX
+    if (products !== undefined) lead.currentProducts = products;
     if (cbr) lead.cbr = cbr;
     if (btn) lead.btn = btn;
     if (gac) lead.gac = gac;
@@ -2337,9 +2394,9 @@ async function agentSaveAll(leadId) {
 
     lead.lastContacted = todayDate;
 
-    Points.awardPoints(newStatus, leadId);
+    Points.awardPoints(finalStatus, leadId);
 
-    if (newStatus === "TDM") {
+    if (finalStatus === "TDM") {
       UI.showToast("TDM — lead returned to admin queue.", "info");
     } else {
       UI.showToast("Saved!", "success");
@@ -7512,12 +7569,48 @@ function renderLeadModal(lead) {
     leadTypeSelect.appendChild(opt);
   });
 
+  // 🚀 THE REASON FIX: Reverse-engineer the saved reason from the status
+  const badReasonContainer = clone.getElementById("f-bad-reason-container");
+  const badReasonSelect = clone.getElementById("f-bad-reason-select");
+
+  const isBadLead = safeMatch(lead?.leadType, "Bad Lead");
+
+  if (isBadLead) {
+    badReasonContainer.style.display = "block";
+
+    // Scan the dropdown options and select the one that matches the saved status
+    if (lead?.status) {
+      Array.from(badReasonSelect.options).forEach((opt) => {
+        if (safeMatch(opt.value, lead.status)) {
+          opt.selected = true;
+        }
+      });
+    }
+  }
+
+  leadTypeSelect.addEventListener("change", (e) => {
+    if (e.target.value === "Bad Lead") {
+      badReasonContainer.style.display = "block";
+    } else {
+      badReasonContainer.style.display = "none";
+      badReasonSelect.value = ""; // Clear it so it doesn't accidentally save
+    }
+  });
+
   const statusSelect = clone.getElementById("f-status");
   Config.leadStatuses.forEach((s) => {
     const opt = document.createElement("option");
     opt.value = s;
     opt.textContent = s;
-    if (safeMatch(lead?.status || "New", s)) opt.selected = true;
+
+    // 🚀 VISUAL FIX: If it's a Bad Lead, visually force the Status dropdown to say "Bad Lead"
+    // so it doesn't sit blank (since the actual status is the reason text)
+    if (isBadLead && safeMatch(s, "Bad Lead")) {
+      opt.selected = true;
+    } else if (!isBadLead && safeMatch(lead?.status || "New", s)) {
+      opt.selected = true;
+    }
+
     statusSelect.appendChild(opt);
   });
 
@@ -7655,7 +7748,35 @@ async function submitEditLead() {
     }
 
     // 2. Handle note appending safely without erasing old notes
-    const newNote = (document.getElementById("f-notes").value || "").trim();
+    let newNote = (document.getElementById("f-notes").value || "").trim();
+
+    // 🚀 THE BAD LEAD FIX: Catch the Reason and enforce it
+    const badLeadReasonEl = document.getElementById("f-bad-reason-select");
+    const badLeadReason = badLeadReasonEl ? badLeadReasonEl.value : "";
+
+    if (payload.Lead_x0020_Type === "Bad Lead") {
+      if (!badLeadReason) {
+        UI.showToast(
+          "Please select a Failure Reason for the Bad Lead.",
+          "warning",
+        );
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Save Changes";
+          submitBtn.style.opacity = "1";
+        }
+        return; // Stop the save!
+      }
+
+      // 🚀 SWAP! The reason becomes the actual status sent to the DB
+      payload.Status = badLeadReason;
+
+      // Inject reason into the note
+      newNote = newNote
+        ? `Reason: ${badLeadReason} - ${newNote}`
+        : `Marked as Bad Lead: ${badLeadReason}`;
+    }
+
     let finalNotes = lead.notes || "";
 
     if (newNote) {
@@ -7668,7 +7789,12 @@ async function submitEditLead() {
         String(today.getFullYear()).slice(-2);
       const user = State.currentUser;
       const agentTag = user && user.name ? " - " + user.name : "";
-      const stamped = `[${dateStamp}${agentTag}] Edited - ${newNote}`;
+
+      // Standout tag if they scrubbed it
+      const actionTag =
+        payload.Lead_x0020_Type === "Bad Lead" ? "Scrubbed" : "Edited";
+      const stamped = `[${dateStamp}${agentTag}] ${actionTag} - ${newNote}`;
+
       finalNotes = finalNotes ? stamped + "\n" + finalNotes : stamped;
       payload.Notes = finalNotes;
     }
@@ -7704,7 +7830,7 @@ async function submitEditLead() {
     lead.state = payload.State || "";
     lead.zip = payload.Zip || "";
     lead.leadType = payload.Lead_x0020_Type || "";
-    lead.status = payload.Status;
+    lead.status = payload.Status; // 🚀 Uses the cleanly swapped status!
     lead.assignedTo = payload.Agent_x0020_Assigned || ""; // Fallback to "" so UI doesn't render literal 'null'
     lead.currentMRC = payload.MonthlyRecurringCharge_x0028_MRC || "";
     lead.currentProducts = payload.CurrentProducts || "";

@@ -1010,277 +1010,6 @@
     <!-- ========================================== -->
     <!-- TEMPLATE: LEAD FEED CARD (MY LEADS)        -->
     <!-- ========================================== -->
-    <template id="tmpl-lead-feed-card">
-      <div
-        id="feed-card-empty"
-        class="feed-card feed-card-empty"
-        style="display: none"
-      >
-        <div class="feed-empty-icon">&#10003;</div>
-        <h3>All Caught Up!</h3>
-        <p id="feed-empty-text"></p>
-      </div>
-
-      <div id="feed-card-active" class="feed-card" style="display: none">
-        <div
-          style="
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 4px;
-          "
-        >
-          <span class="feed-label">Next Lead</span>
-          <div style="display: flex; gap: 6px">
-            <span id="feed-lead-type" class="lead-type-badge"></span>
-            <span id="feed-current-status" class="status-badge"></span>
-          </div>
-        </div>
-
-        <div class="feed-name" id="feed-lead-name"></div>
-        <div
-          id="feed-callback-alert"
-          style="
-            display: none;
-            background: #e0f2fe;
-            border: 1px solid #38bdf8;
-            border-radius: 6px;
-            padding: 8px 14px;
-            margin-bottom: 12px;
-            font-family: var(--font-mono);
-            font-size: 11px;
-            color: #0369a1;
-            font-weight: bold;
-          "
-        >
-          📅 ACTION REQUIRED: Scheduled follow-up or install check for today!
-        </div>
-        <div
-          id="feed-cooloff-alert"
-          style="
-            display: none;
-            background: #fff8e1;
-            border: 1px solid #ffd700;
-            border-radius: 6px;
-            padding: 8px 14px;
-            margin-bottom: 12px;
-            font-family: var(--font-mono);
-            font-size: 11px;
-            color: #8b6914;
-          "
-        >
-          ⏱ This lead is in the cool-off period — you can still update it if the
-          customer reached out.
-        </div>
-
-        <div class="feed-meta-row" id="feed-meta-container"></div>
-
-        <div class="feed-customer-info">
-          <div class="form-group">
-            <label>BTN</label>
-            <input
-              type="text"
-              id="feed-btn"
-              class="form-input"
-              placeholder="Enter BTN"
-            />
-          </div>
-          <div class="form-group">
-            <label>GAC</label>
-            <input
-              type="text"
-              id="feed-gac"
-              class="form-input"
-              placeholder="Enter GAC"
-            />
-          </div>
-          <div class="form-group">
-            <label>CBR</label>
-            <input
-              type="text"
-              id="feed-cbr"
-              class="form-input"
-              placeholder="Enter CBR"
-            />
-          </div>
-          <div class="form-group">
-            <label>Email</label>
-            <input
-              type="email"
-              id="feed-email"
-              class="form-input"
-              placeholder="customer@email.com"
-            />
-          </div>
-          <div class="form-group" style="grid-column: 1 / -1">
-            <label>Package / Current Products</label>
-            <select id="feed-products" class="form-input">
-              <option value="">Select products...</option>
-            </select>
-          </div>
-        </div>
-
-        <div
-          style="
-            display: flex;
-            gap: 16px;
-            margin-bottom: 16px;
-            align-items: flex-end;
-          "
-        >
-          <div style="flex: 1">
-            <div
-              style="
-                font-family: var(--font-mono);
-                font-size: 10px;
-                color: #6b85b0;
-                margin-bottom: 8px;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-              "
-            >
-              Sold By <span style="color: var(--red)">* Required</span>
-            </div>
-            <select id="feed-sold-by" class="form-input" style="width: 100%">
-              <option value="">Select agent who made the sale...</option>
-            </select>
-          </div>
-
-          <div
-            style="
-              display: flex;
-              justify-content: flex-end;
-              align-items: flex-end;
-              gap: 12px;
-              flex: 1.5;
-            "
-          >
-            <div
-              id="callback-wrapper"
-              style="
-                width: 0px;
-                opacity: 0;
-                overflow: hidden;
-                transition: all 0.3s ease-in-out;
-                white-space: nowrap;
-              "
-            >
-              <div
-                id="callback-label"
-                style="
-                  font-family: var(--font-mono);
-                  font-size: 10px;
-                  color: #6b85b0;
-                  margin-bottom: 8px;
-                  text-transform: uppercase;
-                  letter-spacing: 1px;
-                "
-              >
-                Callback date and time
-              </div>
-              <input
-                type="datetime-local"
-                id="f-callback-date"
-                class="form-input"
-                style="width: 100%; box-sizing: border-box"
-              />
-            </div>
-
-            <button
-              id="btn-toggle-callback"
-              class="btn-secondary"
-              type="button"
-              onclick="toggleCallbackDate()"
-              style="
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                height: 38px;
-                padding: 0 16px;
-                font-size: 12px;
-                font-weight: 600;
-                white-space: nowrap;
-                transition: opacity 0.2s;
-              "
-            >
-              ⏱ SETUP CALLBACK
-            </button>
-          </div>
-        </div>
-
-        <div class="feed-status-row">
-          <span class="feed-label">Select Status — click Save to confirm</span>
-          <div class="feed-status-buttons" id="feed-status-buttons"></div>
-        </div>
-
-        <div
-          id="feed-staged-notice"
-          style="
-            display: none;
-            margin-top: 6px;
-            font-family: var(--font-mono);
-            font-size: 11px;
-            color: var(--amber);
-          "
-        ></div>
-
-        <div style="margin-top: 16px">
-          <span class="feed-label">Notes</span>
-          <div
-            id="feed-past-notes-container"
-            style="
-              display: none;
-              background: #f4f7fd;
-              border: 1px solid #d0dcf0;
-              border-radius: 6px;
-              padding: 10px 14px;
-              margin-top: 6px;
-              margin-bottom: 8px;
-              max-height: 140px;
-              overflow-y: auto;
-            "
-          ></div>
-
-          <div
-            style="
-              font-family: var(--font-mono);
-              font-size: 10px;
-              color: #6b85b0;
-              margin-top: 8px;
-              margin-bottom: 4px;
-              text-transform: uppercase;
-              letter-spacing: 1px;
-            "
-          >
-            <span id="feed-today-date"></span> — Today's Note
-          </div>
-
-          <div class="feed-note-row">
-            <textarea
-              id="feed-notes"
-              class="form-input form-textarea"
-              placeholder="Add a note for today..."
-            ></textarea>
-            <button class="btn-primary" id="feed-save-btn">Save</button>
-          </div>
-        </div>
-
-        <div id="feed-next-row" style="display: none; margin-top: 12px">
-          <button
-            class="btn-cyan"
-            style="
-              width: 100%;
-              justify-content: center;
-              font-size: 16px;
-              padding: 14px;
-            "
-            onclick="advanceToNextLead()"
-          >
-            Next Lead →
-          </button>
-        </div>
-      </div>
-    </template>
 
     <template id="tmpl-shop">
       <div
@@ -1554,6 +1283,51 @@
         <div class="feed-status-row">
           <span class="feed-label">Select Status — click Save to confirm</span>
           <div class="feed-status-buttons" id="feed-status-buttons"></div>
+        </div>
+
+        <!-- 🚀 NEW: Bad Lead Reason Dropdown (Hidden by default) -->
+        <div
+          id="feed-bad-reason-container"
+          style="
+            display: none;
+            margin-top: 12px;
+            padding: 12px;
+            background: #fef2f2;
+            border: 1px solid #fca5a5;
+            border-radius: 6px;
+          "
+        >
+          <label
+            style="
+              color: #ef4444;
+              font-family: var(--font-mono);
+              font-size: 10px;
+              text-transform: uppercase;
+              font-weight: bold;
+              display: block;
+              margin-bottom: 6px;
+            "
+          >
+            Failure Reason <span style="color: var(--red)">*</span>
+          </label>
+          <select
+            id="feed-bad-reason-select"
+            class="form-input"
+            style="
+              width: 100%;
+              border-color: #fca5a5;
+              background: #fef2f2;
+              color: #991b1b;
+              cursor: pointer;
+            "
+          >
+            <option value="" disabled selected>Why is this lead bad?</option>
+            <option value="FNQ">Doesn't Qualify for Fiber</option>
+            <option value="Already Has Fiber">Customer Has Fiber</option>
+            <option value="Disconnected">Disconnected</option>
+            <option value="Suspended">Suspended</option>
+            <option value="Other">Other / Blank</option>
+          </select>
         </div>
 
         <div
@@ -1923,24 +1697,53 @@
         <div class="form-section-title">Pipeline & Account</div>
         <div class="form-row">
           <div class="form-group">
-            <label>Lead Type</label
-            ><select id="f-leadtype" class="form-input">
+            <label>Lead Type</label>
+            <select id="f-leadtype" class="form-input">
               <option value="">Select...</option>
             </select>
           </div>
+
+          <!-- 🚀 NEW: Hidden Bad Reason Dropdown -->
+          <div
+            class="form-group"
+            id="f-bad-reason-container"
+            style="display: none"
+          >
+            <label style="color: #ef4444"
+              >Failure Reason <span style="color: var(--red)">*</span></label
+            >
+            <select
+              id="f-bad-reason-select"
+              class="form-input"
+              style="
+                cursor: pointer;
+                border-color: #fca5a5;
+                background: #fef2f2;
+                color: #991b1b;
+              "
+            >
+              <option value="" disabled selected>Why is this lead bad?</option>
+              <option value="FNQ">Fiber Not Qualified</option>
+              <option value="Already Has Fiber">Customer Has Fiber</option>
+              <option value="Disconnected">Disconnected</option>
+              <option value="Suspended">Suspended</option>
+              <option value="Other">Other / Blank</option>
+            </select>
+          </div>
+
           <div class="form-group">
-            <label>Status</label
-            ><select id="f-status" class="form-input"></select>
+            <label>Status</label>
+            <select id="f-status" class="form-input"></select>
           </div>
           <div class="form-group">
-            <label>Assigned To</label
-            ><select id="f-assigned" class="form-input">
+            <label>Assigned To</label>
+            <select id="f-assigned" class="form-input">
               <option value="">Unassigned</option>
             </select>
           </div>
           <div class="form-group">
-            <label>Last Contact</label
-            ><input type="date" id="f-lastcontacted" class="form-input" />
+            <label>Last Contact</label>
+            <input type="date" id="f-lastcontacted" class="form-input" />
           </div>
         </div>
 
