@@ -1167,21 +1167,6 @@
             />
           </div>
           <div class="form-group">
-            <label>Package / Current Products</label>
-            <select id="feed-products" class="form-input">
-              <option value="">Select products...</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Price (MRC)</label>
-            <input
-              type="text"
-              id="feed-mrc"
-              class="form-input"
-              placeholder="e.g. $104.49"
-            />
-          </div>
-          <div class="form-group">
             <label>CBR</label>
             <input
               type="text"
@@ -1189,6 +1174,34 @@
               class="form-input"
               placeholder="Enter CBR"
             />
+          </div>
+          <div class="form-group">
+            <label>GAC</label>
+            <input
+              type="text"
+              id="feed-gac"
+              class="form-input"
+              placeholder="Enter GAC"
+            />
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input
+              type="email"
+              id="feed-email"
+              class="form-input"
+              placeholder="customer@email.com"
+            />
+          </div>
+          <!-- 🚀 THE FIX: Forced full width on the Products box -->
+          <div
+            class="form-group form-group-full"
+            style="grid-column: 1 / -1; width: 100%"
+          >
+            <label>Package / Current Products</label>
+            <select id="feed-products" class="form-input" style="width: 100%">
+              <option value="">Select products...</option>
+            </select>
           </div>
         </div>
 
@@ -1285,7 +1298,7 @@
           <div class="feed-status-buttons" id="feed-status-buttons"></div>
         </div>
 
-        <!-- 🚀 NEW: Bad Lead Reason Dropdown (Hidden by default) -->
+        <!-- 🚀 Bad Lead Reason Dropdown (Hidden by default) -->
         <div
           id="feed-bad-reason-container"
           style="
@@ -1322,7 +1335,7 @@
             "
           >
             <option value="" disabled selected>Why is this lead bad?</option>
-            <option value="FNQ">Doesn't Qualify for Fiber</option>
+            <option value="FNQ">Doesn't Qualify For Fiber</option>
             <option value="Already Has Fiber">Customer Has Fiber</option>
             <option value="Disconnected">Disconnected</option>
             <option value="Suspended">Suspended</option>
