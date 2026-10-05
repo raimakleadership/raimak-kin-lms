@@ -3299,7 +3299,6 @@ async function renderAssignLeads() {
       let callbackCount = 0;
       let outOfHoursCount = 0;
 
-      // 🚀 THE FIX: Store the names for the copy-paste modal
       let unworkedNames = [];
       let callbackNames = [];
 
@@ -3307,7 +3306,9 @@ async function renderAssignLeads() {
 
       State.leads.forEach((lead) => {
         if (lead.assignedTo !== selectedAgent) return;
-        if (Config.terminalStatuses.includes(lead.status || "New")) return;
+
+        const currentStatus = lead.status || "New";
+        if (Config.terminalStatuses.includes(currentStatus)) return;
         if (Graph.isInCoolOff(lead)) return;
 
         let isDueCallback = false;
@@ -3320,7 +3321,7 @@ async function renderAssignLeads() {
 
           let waitingForDate = false;
 
-          if (lead.status === "Pending Order") {
+          if (currentStatus === "Pending Order") {
             if (todayMidnight <= scheduledDate) waitingForDate = true;
           } else {
             if (todayMidnight < scheduledDate) waitingForDate = true;
@@ -3328,6 +3329,18 @@ async function renderAssignLeads() {
 
           if (waitingForDate) return;
           isDueCallback = true;
+        }
+
+        // 🚀 NEW LOGIC: Only count valid statuses for the standard workflow queue.
+        // We added "Not Interested" here so they correctly pop back into the agent's workable queue after 7 days!
+        const validUnworkedStatuses = [
+          "New",
+          "1st Contact",
+          "2nd Contact",
+          "Not Interested",
+        ];
+        if (!isDueCallback && !validUnworkedStatuses.includes(currentStatus)) {
+          return;
         }
 
         let isAwake = true;
@@ -3360,10 +3373,10 @@ async function renderAssignLeads() {
           outOfHoursCount++;
         } else if (isDueCallback) {
           callbackCount++;
-          callbackNames.push(lead.name); // Store callback names
+          callbackNames.push(lead.name);
         } else {
           unworkedCount++;
-          unworkedNames.push(lead.name); // Store unworked names
+          unworkedNames.push(lead.name);
         }
       });
 
@@ -3397,7 +3410,6 @@ async function renderAssignLeads() {
         readinessBadge.style.backgroundColor = "rgba(244, 63, 94, 0.15)";
         readinessBadge.style.color = "#E11D48";
 
-        // 🚀 THE FIX: Make it clickable and spawn the copy modal
         readinessBadge.style.cursor = "pointer";
         readinessBadge.title = "Click to view and copy pending leads";
         readinessBadge.onclick = () => {

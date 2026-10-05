@@ -1283,17 +1283,12 @@ const Graph = (() => {
       if (lead.lastContacted) {
         const daysSince = (now - new Date(lead.lastContacted)) / 86400000;
 
-        // 🚀 TWEAK: Handle "3rd Contact" (Standard) and "Not Interested" (7-Day)
+        // 🚀 TWEAK: ONLY "3rd Contact" gets recycled after cool-off.
+        // "Not Interested" leads just thaw out and stay with the agent to be worked again!
         const is3rdContactReady =
           lead.status === "3rd Contact" && daysSince >= coolOffDays;
-        const isNotInterestedReady =
-          lead.status === "Not Interested" && daysSince >= 7;
 
-        if (
-          (is3rdContactReady || isNotInterestedReady) &&
-          isAssigned &&
-          !hasCallback
-        ) {
+        if (is3rdContactReady && isAssigned && !hasCallback) {
           flags.push("needs_recycle");
         }
       }
@@ -1466,7 +1461,12 @@ const Graph = (() => {
 
     if (!lead.lastContacted) return false;
     const daysSince = (new Date() - new Date(lead.lastContacted)) / 86400000;
-    return daysSince < Config.rules.coolOffDays;
+
+    // 🚀 THE FIX: Override the default config timer for Not Interested leads
+    const targetCoolOff =
+      currentStatus === "not interested" ? 7 : Config.rules.coolOffDays;
+
+    return daysSince < targetCoolOff;
   }
 
   // Count unique leads an agent contacted today.

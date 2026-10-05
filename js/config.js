@@ -53,7 +53,17 @@ const Config = {
   ],
 
   // Terminal statuses — removed from agent queue, admin only
-  terminalStatuses: ["Do Not Call", "Sold", "Already has Fiber", "TDM"],
+  terminalStatuses: [
+    "Do Not Call",
+    "Sold",
+    "Already has Fiber",
+    "TDM",
+    "Bad Lead",
+    "Disconnected",
+    "Suspended",
+    "Other",
+    "FNQ",
+  ],
 
   // TDM is kicked back to admin (D2D only)
   adminOnlyStatuses: ["TDM"],
