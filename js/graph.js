@@ -180,16 +180,37 @@ const Graph = (() => {
       );
     }
 
+    // 🚀 MAC FIX: THE AUTO-HEALER
+    // If we have a delta-sync token but almost no leads in memory, the local database was cleared.
+    // We must destroy the token to force a full cold boot, otherwise the queue will stay blank.
+    const token = localStorage.getItem("RaimakKineticLeadsLastSyncDate");
+    if (token && existingLeads.length < 5) {
+      console.warn(
+        "⚠️ Suspiciously low lead count detected. Forcing full cache reset...",
+      );
+      localStorage.removeItem("RaimakKineticLeadsLastSyncDate");
+      lastSyncDate = null; // Kill the token for this run
+      existingLeads = []; // Wipe the ghost array
+    }
+
     // 🚀 STEP 2: CHECK FOR 30+ DAY STALE CACHE OR FIRST LOGIN
     let isStaleCache = false;
     if (lastSyncDate && typeof lastSyncDate === "string") {
-      const daysSinceSync =
-        (Date.now() - new Date(lastSyncDate).getTime()) / (1000 * 60 * 60 * 24);
-      if (daysSinceSync > 30) {
+      // 🚀 MAC FIX #1: Use safeDate instead of native new Date()
+      const parsedLastSync = safeDate(lastSyncDate);
+
+      if (isNaN(parsedLastSync.getTime())) {
+        // If even safeDate fails, force a cold boot
         isStaleCache = true;
-        console.warn(
-          `⏳ [Graph.getLeads] Cache is ${Math.round(daysSinceSync)} days old (>30 days). Forcing Cold Boot.`,
-        );
+      } else {
+        const daysSinceSync =
+          (Date.now() - parsedLastSync.getTime()) / (1000 * 60 * 60 * 24);
+        if (daysSinceSync > 30) {
+          isStaleCache = true;
+          console.warn(
+            `⏳ [Graph.getLeads] Cache is ${Math.round(daysSinceSync)} days old (>30 days). Forcing Cold Boot.`,
+          );
+        }
       }
     } else {
       isStaleCache = true; // No timestamp = First login ever
@@ -210,8 +231,16 @@ const Graph = (() => {
 
     // Only apply delta filter if we are NOT cold booting
     if (!isColdBoot && lastSyncDate && typeof lastSyncDate === "string") {
-      const safeDate = lastSyncDate.split(".")[0] + "Z";
-      url += `&$filter=fields/Modified gt '${safeDate}'`;
+      // 🚀 THE DELTA GAP FIX: 5-minute overlap (~6-7 polling chances to catch indexing lag)
+      const syncTime = safeDate(lastSyncDate);
+
+      // Roll the clock back 5 minutes from the last sync
+      syncTime.setMinutes(syncTime.getMinutes() - 5);
+
+      // Format perfectly for SharePoint (requires the Z)
+      const safeDateStr = syncTime.toISOString().split(".")[0] + "Z";
+
+      url += `&$filter=fields/Modified gt '${safeDateStr}'`;
     }
 
     // 🚀 STEP 4: Fetch with Streamed Progress Modal if Cold Booting
@@ -249,8 +278,12 @@ const Graph = (() => {
         l.status !== "Deleted",
     );
 
+    // 🚀 MAC FIX #2: Use safeDate on the modified timestamps so the math doesn't fail
     const validTimestamps = updatedBatch
-      .map((l) => new Date(l.modified || l.lastModifiedDateTime).getTime())
+      .map((l) => {
+        const dateToParse = l.modified || l.lastModifiedDateTime;
+        return safeDate(dateToParse).getTime();
+      })
       .filter((t) => !isNaN(t));
 
     if (validTimestamps.length > 0) {
@@ -790,16 +823,34 @@ const Graph = (() => {
       }
     }
 
+    // 🚀 MAC FIX: THE AUTO-HEALER
+    const token = localStorage.getItem("RaimakKineticActivityLastSyncDate");
+    if (token && existingLogs.length < 5) {
+      console.warn(
+        "⚠️ Suspiciously low activity log count detected. Forcing full cache reset...",
+      );
+      localStorage.removeItem("RaimakKineticActivityLastSyncDate");
+      lastSyncDate = null; // Kill the token for this run
+      existingLogs = []; // Wipe the ghost array
+    }
+
     // 🚀 STEP 2: CHECK FOR 30+ DAY STALE CACHE OR FIRST LOGIN
     let isStaleCache = false;
     if (lastSyncDate && typeof lastSyncDate === "string") {
-      const daysSinceSync =
-        (Date.now() - new Date(lastSyncDate).getTime()) / (1000 * 60 * 60 * 24);
-      if (daysSinceSync > 30) {
+      // 🚀 MAC FIX: Use safeDate
+      const parsedLastSync = safeDate(lastSyncDate);
+
+      if (isNaN(parsedLastSync.getTime())) {
         isStaleCache = true;
-        console.warn(
-          `⏳ [Graph.getActivityLog] Activity cache is ${Math.round(daysSinceSync)} days old (>30 days). Forcing Cold Boot.`,
-        );
+      } else {
+        const daysSinceSync =
+          (Date.now() - parsedLastSync.getTime()) / (1000 * 60 * 60 * 24);
+        if (daysSinceSync > 30) {
+          isStaleCache = true;
+          console.warn(
+            `⏳ [Graph.getActivityLog] Activity cache is ${Math.round(daysSinceSync)} days old (>30 days). Forcing Cold Boot.`,
+          );
+        }
       }
     } else {
       isStaleCache = true; // No timestamp = First login ever
@@ -819,12 +870,15 @@ const Graph = (() => {
       `/items?expand=fields($select=${selectedFields})&$select=id,createdDateTime&$top=5000`;
 
     // ==========================================
-    // 🍏 🚀 THE IOS SERVER-SIDE CHOKE
+    // 🍏 🚀 THE IOS SERVER-SIDE CHOKE & DELTA FIX
     // ==========================================
     let applyFilterDate = null;
 
     if (!isColdBoot && lastSyncDate && typeof lastSyncDate === "string") {
-      applyFilterDate = lastSyncDate;
+      // 🚀 THE DELTA GAP FIX: 5-minute overlap for activity logs
+      const syncTime = safeDate(lastSyncDate);
+      syncTime.setMinutes(syncTime.getMinutes() - 5);
+      applyFilterDate = syncTime.toISOString();
     }
 
     const isIOS =
@@ -835,7 +889,8 @@ const Graph = (() => {
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - 30);
 
-      if (!applyFilterDate || new Date(applyFilterDate) < cutoff) {
+      // 🚀 MAC FIX: Use safeDate for comparison so iOS doesn't crash on invalid dates
+      if (!applyFilterDate || safeDate(applyFilterDate) < cutoff) {
         applyFilterDate = cutoff.toISOString();
         console.log(
           "[Perf] iOS Server Choke Engaged: Forcing SharePoint to only send 30 days.",
@@ -844,8 +899,8 @@ const Graph = (() => {
     }
 
     if (applyFilterDate) {
-      const safeDate = applyFilterDate.split(".")[0] + "Z";
-      url += `&$filter=fields/Created gt '${safeDate}'`;
+      const safeDateStr = applyFilterDate.split(".")[0] + "Z";
+      url += `&$filter=fields/Created gt '${safeDateStr}'`;
     }
     // ==========================================
 
@@ -881,10 +936,19 @@ const Graph = (() => {
       await LocalDB.saveItems("activity_logs", newLogs);
     }
 
-    const finalizedLogs = [...newLogs.reverse(), ...existingLogs];
+    // 🚀 THE DUPLICATE FIX: Prevent the 5-minute overlap from creating double logs
+    const logMap = new Map();
+    existingLogs.forEach((log) => logMap.set(log.id, log));
+    newLogs.forEach((log) => logMap.set(log.id, log)); // Overwrites old ones with fresh data
 
+    // Convert back to array and strictly sort newest-to-oldest
+    const finalizedLogs = Array.from(logMap.values()).sort(
+      (a, b) => new Date(b.timestamp) - new Date(a.timestamp),
+    );
+
+    // 🚀 MAC FIX: Use safeDate when saving the newest timestamp
     const validTimestamps = newLogs
-      .map((log) => new Date(log.timestamp).getTime())
+      .map((log) => safeDate(log.timestamp).getTime())
       .filter((time) => !isNaN(time));
 
     let newLastSyncDate = lastSyncDate;
@@ -1454,15 +1518,35 @@ const Graph = (() => {
     });
   }
 
+  // 🚀 MAC FIX: Bulletproof Date Parser for WebKit/Safari/Mac Chrome
+  function safeDate(dateStr) {
+    if (!dateStr) return new Date(0);
+    if (dateStr instanceof Date) return dateString;
+
+    // Fix SharePoint/SQL spaces (Macs hate spaces in date strings)
+    let cleanStr = String(dateStr).trim().replace(" ", "T");
+    let d = new Date(cleanStr);
+
+    // If it STILL fails (NaN), aggressively reformat hyphens to slashes
+    if (isNaN(d.getTime())) {
+      cleanStr = cleanStr.replace(/-/g, "/").replace("T", " ");
+      d = new Date(cleanStr);
+    }
+    return d;
+  }
+
   function isInCoolOff(lead) {
     const currentStatus = (lead.status || "").trim().toLowerCase();
 
     if (currentStatus === "new") return false;
-
     if (!lead.lastContacted) return false;
-    const daysSince = (new Date() - new Date(lead.lastContacted)) / 86400000;
 
-    // 🚀 THE FIX: Override the default config timer for Not Interested leads
+    // 🚀 THE MAC FIX: Use safeDate instead of new Date()
+    const lastDate = safeDate(lead.lastContacted);
+    if (isNaN(lastDate.getTime())) return false; // Fail open instead of crashing
+
+    const daysSince = (new Date() - lastDate) / 86400000;
+
     const targetCoolOff =
       currentStatus === "not interested" ? 7 : Config.rules.coolOffDays;
 
