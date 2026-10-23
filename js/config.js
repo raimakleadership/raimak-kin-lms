@@ -36,7 +36,7 @@ const Config = {
     maxContactsPerDay: 9999,
     recycleAfterDays: 30,
     appVersion: "3.0",
-    hidePreviousAgentNotes: false,
+    hidePreviousAgentNotes: true,
   },
 
   // Pipeline statuses
