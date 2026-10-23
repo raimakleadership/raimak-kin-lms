@@ -240,7 +240,7 @@ const PipelineInsights = {
           const clickedLabel =
             PipelineInsights.currentDataArr[elements[0].index][0];
 
-          // 🚀 THE FIX: We now tell the chart to look for BOTH the standard IDs and the "opt-" quarantined IDs!
+          // 🚀 ROUTE TO THE CORRECT FILTER DROPDOWN
           let targetIds = [];
           if (PipelineInsights.currentMode === "state")
             targetIds = [
@@ -252,13 +252,31 @@ const PipelineInsights = {
             targetIds = ["filter-type", "opt-filter-type", "bulk-type-select"];
           if (PipelineInsights.currentMode === "status")
             targetIds = ["filter-status", "opt-filter-status"];
+          if (PipelineInsights.currentMode === "assigned")
+            targetIds = ["filter-assignment"]; // Points to the new dropdown
 
           for (let id of targetIds) {
             const selectEl = document.getElementById(id);
             if (selectEl) {
               for (let i = 0; i < selectEl.options.length; i++) {
                 const opt = selectEl.options[i];
-                if (
+
+                // Special mapping logic for the Assignment dropdown
+                if (PipelineInsights.currentMode === "assigned") {
+                  if (
+                    (clickedLabel === "Assigned" && opt.value === "assigned") ||
+                    (clickedLabel === "Unassigned" &&
+                      opt.value === "unassigned")
+                  ) {
+                    selectEl.value = opt.value;
+                    selectEl.dispatchEvent(
+                      new Event("change", { bubbles: true }),
+                    );
+                    return;
+                  }
+                }
+                // Standard logic for State, Type, and Status
+                else if (
                   opt.value.toUpperCase() === clickedLabel.toUpperCase() ||
                   opt.text.toUpperCase() === clickedLabel.toUpperCase()
                 ) {
@@ -1997,16 +2015,41 @@ function renderLeadFeedCard(myLeads) {
 
   const pastNotesContainer = clone.getElementById("feed-past-notes-container");
   if (lead.notes && lead.notes.trim()) {
-    pastNotesContainer.style.display = "block";
+    // 🚀 NEW: Identify the current user and check admin status
+    const currentUser = State.currentUser
+      ? (State.currentUser.name || State.currentUser.title || "").trim()
+      : "";
+    const isAdmin =
+      State.currentUser &&
+      (State.currentUser.role === "Admin" || State.currentUser.isAdmin);
+
+    // Check config toggle (defaults to false if missing)
+    const shouldHideOthers =
+      Config.rules && Config.rules.hidePreviousAgentNotes === true && !isAdmin;
+
     const notesHtml = lead.notes
       .split("\n")
       .filter((l) => l.trim())
       .map((line) => {
         const match = line.match(/^\[(\d{2}\/\d{2}(?:\/\d{2})?)(.*?)\]\s*(.*)/);
+        let date = "",
+          agent = "",
+          text = line;
+
         if (match) {
-          const date = match[1];
-          const agent = match[2] ? match[2].replace(/^\s*-\s*/, "") : "";
-          const text = match[3];
+          date = match[1];
+          agent = match[2] ? match[2].replace(/^\s*-\s*/, "").trim() : "";
+          text = match[3];
+        }
+
+        // 🛡️ THE FILTER: Hide if the note belongs to someone else (or is legacy) and hiding is enabled
+        if (shouldHideOthers) {
+          if (!agent || agent !== currentUser) {
+            return ""; // Skip rendering this specific note
+          }
+        }
+
+        if (match) {
           return `
             <div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #E8EFF8">
               <div style="display:flex;gap:8px;align-items:center;margin-bottom:3px">
@@ -2016,6 +2059,7 @@ function renderLeadFeedCard(myLeads) {
               <span style="font-size:13px;color:#1A2640">${escHtml(text)}</span>
             </div>`;
         }
+
         return `
           <div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #E8EFF8">
             <div style="margin-bottom:3px">
@@ -2025,7 +2069,14 @@ function renderLeadFeedCard(myLeads) {
           </div>`;
       })
       .join("");
-    pastNotesContainer.innerHTML = notesHtml;
+
+    // Only show the container if there are actually notes left to display after filtering
+    if (notesHtml.trim()) {
+      pastNotesContainer.style.display = "block";
+      pastNotesContainer.innerHTML = notesHtml;
+    } else {
+      pastNotesContainer.style.display = "none";
+    }
   }
 
   clone.getElementById("feed-save-btn").onclick = () => agentSaveAll(lead.id);
@@ -3960,7 +4011,6 @@ function renderLeads() {
   });
 
   sortedForBatches.forEach((l) => {
-    // 🚀 CACHE THE HEAVY MATH ONCE ON LOAD
     l._time = l.createdAt ? new Date(l.createdAt).getTime() : 0;
     l._prevCount = l.previousAgents
       ? l.previousAgents.split(",").filter((x) => x.trim()).length
@@ -4009,7 +4059,7 @@ function renderLeads() {
     `// ${State.leads.length} total`;
 
   // ==========================================
-  // 🚀 4. CSV IMPORTER WIRING (DYNAMIC TYPES)
+  // 🚀 4. CSV IMPORTER WIRING
   // ==========================================
   const importBtn = clone.getElementById("importLeadsBtn");
   const fileInput = clone.getElementById("leadFileInput");
@@ -4024,7 +4074,6 @@ function renderLeads() {
       modal.style.cssText =
         "background:#fff; padding:24px; border-radius:12px; width:320px; box-shadow:0 10px 25px rgba(0,0,0,0.2); display:flex; flex-direction:column; gap:16px;";
 
-      // 🚀 DYNAMIC INJECTION: Pulls directly from config.js and defaults to Unscrubbed
       const dynamicTypeOptions = (Config.leadTypes || [])
         .map(
           (t) =>
@@ -4136,9 +4185,15 @@ function renderLeads() {
       .map((t) => `<option value="${t}">${t}</option>`)
       .join("");
 
+    // 🚀 INJECTED ASSIGNMENT FILTER & EXPORT BUTTON
     agentFilter.parentNode.insertAdjacentHTML(
       "beforeend",
       `
+      <select id="filter-assignment" class="filter-select">
+        <option value="all">Any Assignment</option>
+        <option value="assigned">Assigned (Any)</option>
+        <option value="unassigned">Unassigned</option>
+      </select>
       <select id="filter-batch" class="filter-select">
         <option value="all">Any Batch</option>
         ${batchOptionsHTML}
@@ -4162,6 +4217,10 @@ function renderLeads() {
         <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#64748B" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
       </button>
 
+      <button id="leads-export-csv" class="btn-ghost" style="padding: 6px; color: #10b981;" title="Export Filtered Leads to CSV">
+        <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+      </button>
+
       <button id="leads-delete-batch" class="btn-ghost" style="padding: 6px; color: #ef4444;" title="Delete Selected Batch">
         <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
       </button>
@@ -4169,13 +4228,17 @@ function renderLeads() {
     );
   }
 
+  const assignmentFilter = clone.querySelector("#filter-assignment");
   const batchFilter = clone.querySelector("#filter-batch");
   const stateFilter = clone.querySelector("#filter-state");
   const typeFilter = clone.querySelector("#filter-type");
   const sortFilter = clone.querySelector("#filter-sort");
   const resetFiltersBtn = clone.querySelector("#leads-reset-filters");
   const deleteBatchBtn = clone.querySelector("#leads-delete-batch");
+  const exportCsvBtn = clone.querySelector("#leads-export-csv");
 
+  if (assignmentFilter && State.filters.assignment)
+    assignmentFilter.value = State.filters.assignment;
   if (batchFilter && State.filters.batch)
     batchFilter.value = State.filters.batch;
   if (stateFilter && State.filters.state)
@@ -4184,7 +4247,148 @@ function renderLeads() {
   if (sortFilter && State.filters.sort) sortFilter.value = State.filters.sort;
 
   // ==========================================
-  // 🗑️ THE DELETE BATCH WORKFLOW (WYSIWYG VERSION)
+  // 🧠 REUSABLE FILTER EXTRACTOR
+  // ==========================================
+  function getCurrentFilteredLeads() {
+    let filtered =
+      typeof getFilteredLeads === "function" ? getFilteredLeads() : State.leads;
+
+    const selectedAssignment = assignmentFilter
+      ? assignmentFilter.value
+      : "all";
+    const selectedBatch = batchFilter ? batchFilter.value : "all";
+    const selectedState = stateFilter ? stateFilter.value : "all";
+    const selectedType = typeFilter ? typeFilter.value : "all";
+    const selectedSort = sortFilter ? sortFilter.value : "newest";
+
+    filtered = filtered.filter((l) => {
+      const assignedTo = String(l.assignedTo || "").trim();
+      const assignmentMatch =
+        selectedAssignment === "all" ||
+        (selectedAssignment === "assigned" && assignedTo !== "") ||
+        (selectedAssignment === "unassigned" && assignedTo === "");
+
+      const batchMatch =
+        selectedBatch === "all" || l._batchId === selectedBatch;
+      const stateMatch =
+        selectedState === "all" ||
+        (l.state && l.state.toUpperCase() === selectedState.toUpperCase());
+      const typeMatch =
+        selectedType === "all" ||
+        (l.leadType && l.leadType.toLowerCase() === selectedType.toLowerCase());
+
+      return assignmentMatch && batchMatch && stateMatch && typeMatch;
+    });
+
+    filtered.sort((a, b) => {
+      if (selectedSort === "least_worked") {
+        return a._prevCount - b._prevCount || b._time - a._time;
+      } else if (selectedSort === "most_worked") {
+        return b._prevCount - a._prevCount || b._time - a._time;
+      } else {
+        return b._time - a._time;
+      }
+    });
+
+    return filtered;
+  }
+
+  // ==========================================
+  // 📥 THE CSV EXPORT WORKFLOW
+  // ==========================================
+  if (exportCsvBtn) {
+    exportCsvBtn.addEventListener("click", () => {
+      const leadsToExport = getCurrentFilteredLeads();
+
+      if (leadsToExport.length === 0) {
+        if (typeof UI !== "undefined" && UI.showToast) {
+          UI.showToast("No leads match the current filters!", "warning");
+        } else {
+          alert("No leads match the current filters!");
+        }
+        return;
+      }
+
+      const escCsv = (val) => {
+        const str = String(val ?? "")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/\r?\n|\r/g, " | ")
+          .trim();
+        return `"${str.replace(/"/g, '""')}"`;
+      };
+
+      const headers = [
+        "SharePoint ID",
+        "Kinetic Lead ID",
+        "Status",
+        "Lead Type",
+        "Assigned Agent",
+        "Name",
+        "First Name",
+        "Last Name",
+        "BTN",
+        "CBR",
+        "GAC",
+        "Address",
+        "City",
+        "State",
+        "Zip",
+        "Last Contacted",
+        "Created Date",
+        "Notes",
+      ];
+
+      const csvRows = [headers.join(",")];
+
+      leadsToExport.forEach((l) => {
+        csvRows.push(
+          [
+            escCsv(l.id),
+            escCsv(l.kineticLeadId),
+            escCsv(l.status),
+            escCsv(l.leadType),
+            escCsv(l.assignedTo),
+            escCsv(l.name),
+            escCsv(l.firstName),
+            escCsv(l.lastName),
+            escCsv(l.btn),
+            escCsv(l.cbr),
+            escCsv(l.gac),
+            escCsv(l.address),
+            escCsv(l.city),
+            escCsv(l.state),
+            escCsv(l.zip),
+            escCsv(l.lastContacted),
+            escCsv(l.createdAt),
+            escCsv(l.notes),
+          ].join(","),
+        );
+      });
+
+      const csvContent = "\uFEFF" + csvRows.join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const dateStamp = new Date().toISOString().split("T")[0];
+
+      link.setAttribute("href", url);
+      link.setAttribute("download", `kinetic_leads_export_${dateStamp}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      if (typeof UI !== "undefined" && UI.showToast) {
+        UI.showToast(
+          `Exported ${leadsToExport.length} filtered leads!`,
+          "success",
+        );
+      }
+    });
+  }
+
+  // ==========================================
+  // 🗑️ THE DELETE BATCH WORKFLOW
   // ==========================================
   if (deleteBatchBtn) {
     deleteBatchBtn.addEventListener("click", () => {
@@ -4197,26 +4401,7 @@ function renderLeads() {
         return;
       }
 
-      let baseLeads =
-        typeof getFilteredLeads === "function"
-          ? getFilteredLeads()
-          : State.leads;
-
-      const selectedState = stateFilter ? stateFilter.value : "all";
-      const selectedType = typeFilter ? typeFilter.value : "all";
-
-      const leadsToDelete = baseLeads.filter((l) => {
-        const batchMatch = l._batchId === selectedBatch;
-        const stateMatch =
-          selectedState === "all" ||
-          (l.state && l.state.toUpperCase() === selectedState.toUpperCase());
-        const typeMatch =
-          selectedType === "all" ||
-          (l.leadType &&
-            l.leadType.toLowerCase() === selectedType.toLowerCase());
-
-        return batchMatch && stateMatch && typeMatch;
-      });
+      const leadsToDelete = getCurrentFilteredLeads();
 
       if (leadsToDelete.length === 0) {
         alert("No leads match your current filters within this batch.");
@@ -4250,7 +4435,6 @@ function renderLeads() {
 
       document.getElementById("cancelBatchDelBtn").onclick = () =>
         overlay.remove();
-
       document.getElementById("confirmBatchDelBtn").onclick = async () => {
         const confirmBtn = document.getElementById("confirmBatchDelBtn");
         confirmBtn.innerHTML = `<span>Deleting...</span>`;
@@ -4380,37 +4564,7 @@ function renderLeads() {
   const pageIndicator = paginationWrap.querySelector("#leads-page-indicator");
 
   function updateTable() {
-    let filtered =
-      typeof getFilteredLeads === "function" ? getFilteredLeads() : State.leads;
-
-    const selectedBatch = batchFilter ? batchFilter.value : "all";
-    const selectedState = stateFilter ? stateFilter.value : "all";
-    const selectedType = typeFilter ? typeFilter.value : "all";
-    const selectedSort = sortFilter ? sortFilter.value : "newest";
-
-    filtered = filtered.filter((l) => {
-      const batchMatch =
-        selectedBatch === "all" || l._batchId === selectedBatch;
-      const stateMatch =
-        selectedState === "all" ||
-        (l.state && l.state.toUpperCase() === selectedState.toUpperCase());
-      const typeMatch =
-        selectedType === "all" ||
-        (l.leadType && l.leadType.toLowerCase() === selectedType.toLowerCase());
-
-      return batchMatch && stateMatch && typeMatch;
-    });
-
-    filtered.sort((a, b) => {
-      if (selectedSort === "least_worked") {
-        return a._prevCount - b._prevCount || b._time - a._time;
-      } else if (selectedSort === "most_worked") {
-        return b._prevCount - a._prevCount || b._time - a._time;
-      } else {
-        return b._time - a._time;
-      }
-    });
-
+    const filtered = getCurrentFilteredLeads();
     const total = filtered.length;
     const totalPages = Math.max(1, Math.ceil(total / itemsPerPage));
 
@@ -4461,6 +4615,9 @@ function renderLeads() {
     State.filters.search = searchInput ? searchInput.value : "";
     State.filters.status = statusFilter ? statusFilter.value : "all";
     State.filters.assignedTo = agentFilter ? agentFilter.value : "all";
+    State.filters.assignment = assignmentFilter
+      ? assignmentFilter.value
+      : "all";
     State.filters.batch = batchFilter ? batchFilter.value : "all";
     State.filters.state = stateFilter ? stateFilter.value : "all";
     State.filters.type = typeFilter ? typeFilter.value : "all";
@@ -4490,6 +4647,8 @@ function renderLeads() {
   }
   if (statusFilter) statusFilter.addEventListener("change", handleFilterChange);
   if (agentFilter) agentFilter.addEventListener("change", handleFilterChange);
+  if (assignmentFilter)
+    assignmentFilter.addEventListener("change", handleFilterChange);
   if (batchFilter) batchFilter.addEventListener("change", handleFilterChange);
   if (stateFilter) stateFilter.addEventListener("change", handleFilterChange);
   if (typeFilter) typeFilter.addEventListener("change", handleFilterChange);
@@ -4500,6 +4659,7 @@ function renderLeads() {
       if (searchInput) searchInput.value = "";
       if (statusFilter) statusFilter.value = "all";
       if (agentFilter) agentFilter.value = "all";
+      if (assignmentFilter) assignmentFilter.value = "all";
       if (batchFilter) batchFilter.value = "all";
       if (typeFilter) typeFilter.value = "all";
       if (stateFilter) stateFilter.value = "all";
@@ -4508,6 +4668,7 @@ function renderLeads() {
       State.filters.search = "";
       State.filters.status = "all";
       State.filters.assignedTo = "all";
+      State.filters.assignment = "all";
       State.filters.batch = "all";
       State.filters.type = "all";
       State.filters.state = "all";
