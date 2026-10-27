@@ -1482,9 +1482,10 @@ function renderMyLeads() {
     });
 
     const statusPriority = {
-      "3rd Contact": 1,
-      "2nd Contact": 2,
-      "1st Contact": 3,
+      New: 1,
+      "1st Contact": 2,
+      "2nd Contact": 3,
+      "3rd Contact": 4,
     };
 
     myLeads.sort((a, b) => {
